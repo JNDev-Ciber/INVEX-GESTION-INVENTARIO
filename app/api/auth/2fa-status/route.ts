@@ -1,9 +1,12 @@
-export const runtime = 'edge'
 import { NextRequest, NextResponse } from "next/server"
 import { sql } from "@/lib/neon"
 
+export const runtime = "edge"
+
 export async function GET(req: NextRequest) {
-  const username = req.nextUrl.searchParams.get("username")!
+  const username = req.nextUrl.searchParams.get("username")
+  if (!username) return NextResponse.json({ error: "Falta username" }, { status: 400 })
+
   const result = await sql`
     SELECT twofa_activated FROM users WHERE username = ${username} LIMIT 1
   `

@@ -11,9 +11,6 @@ const nextConfig = {
   },
   distDir: ".next",
   generateEtags: false,
-  experimental: {
-    esmExternals: true,
-  },
 };
 
 module.exports = nextConfig;
