@@ -1,0 +1,33 @@
+name = "invex-gestion-inventario"
+pages_build_output_dir = ".vercel/output/static"
+compatibility_date = "2025-10-29"
+compatibility_flags = ["nodejs_compat"]
+
+# Variables globales (aplican a local development)
+[vars]
+CLOUDINARY_CLOUD_NAME = "dc3f03x9j"
+CLOUDINARY_API_KEY = "527312762427179"
+CLOUDINARY_API_SECRET = "5lyN3WTbcqBGqjPf3-CqSxPOzRE"
+# Base de datos para desarrollo local (usa la de preview/prueba)
+DATABASE_URL = "postgresql://neondb_owner:npg_f75ZxJQGdwXF@ep-restless-sound-acwa23ux-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+NEXT_PUBLIC_DATABASE_URL = "postgresql://neondb_owner:npg_f75ZxJQGdwXF@ep-restless-sound-acwa23ux-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+
+# 🚀 Configuración para PRODUCCIÓN (base de datos real)
+[env.production]
+vars = { 
+  CLOUDINARY_CLOUD_NAME = "dc3f03x9j",
+  CLOUDINARY_API_KEY = "527312762427179",
+  CLOUDINARY_API_SECRET = "5lyN3WTbcqBGqjPf3-CqSxPOzRE",
+  DATABASE_URL = "postgresql://neondb_owner:npg_f75ZxJQGdwXF@ep-restless-sound-acwa23ux-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require",
+  NEXT_PUBLIC_DATABASE_URL = "postgresql://neondb_owner:npg_f75ZxJQGdwXF@ep-restless-sound-acwa23ux-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require"
+}
+
+# 🧪 Configuración para PREVIEW (base de datos de prueba)
+[env.preview]
+vars = { 
+  CLOUDINARY_CLOUD_NAME = "dc3f03x9j",
+  CLOUDINARY_API_KEY = "527312762427179",
+  CLOUDINARY_API_SECRET = "5lyN3WTbcqBGqjPf3-CqSxPOzRE",
+  DATABASE_URL = "postgresql://neondb_owner:npg_f75ZxJQGdwXF@ep-restless-sound-acwa23ux-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+  NEXT_PUBLIC_DATABASE_URL = "postgresql://neondb_owner:npg_f75ZxJQGdwXF@ep-restless-sound-acwa23ux-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+}
