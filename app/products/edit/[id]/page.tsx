@@ -1,4 +1,5 @@
 "use client"
+
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ProductForm } from "@/components/product-form"
@@ -40,7 +41,7 @@ export default function EditProductPage({ params }: PageProps) {
     }
   }, [productId, products])
 
-  // ✅ Función para manejar la actualización (REQUERIDA)
+  // ✅ Función para manejar la actualización
   const handleUpdateProduct = async (updatedData: Omit<Product, "id" | "createdAt" | "updatedAt">) => {
     if (!productData) return
 
@@ -63,7 +64,7 @@ export default function EditProductPage({ params }: PageProps) {
     }
   }
 
-  // ✅ Función para cancelar (REQUERIDA)
+  // ✅ Función para cancelar
   const handleCancel = () => {
     router.push("/")
   }
