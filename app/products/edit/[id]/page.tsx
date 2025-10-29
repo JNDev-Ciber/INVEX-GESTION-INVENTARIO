@@ -1,4 +1,5 @@
 // app/products/edit/[id]/page.tsx
+export const runtime = 'nodejs';
 "use client"
 
 import { useState, useEffect } from "react"
