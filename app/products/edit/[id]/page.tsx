@@ -1,7 +1,6 @@
 // app/products/edit/[id]/page.tsx
-export const runtime = 'nodejs';
 "use client"
-
+export const runtime = 'nodejs';
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ProductForm } from "@/components/product-form"
