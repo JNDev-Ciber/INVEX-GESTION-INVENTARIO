@@ -1,6 +1,5 @@
-// app/products/edit/[id]/page.tsx
 "use client"
-export const runtime = 'nodejs';
+export const runtime = 'edge'
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ProductForm } from "@/components/product-form"
