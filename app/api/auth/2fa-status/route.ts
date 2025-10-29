@@ -1,16 +1,17 @@
-import { NextRequest, NextResponse } from "next/server"
-import { sql } from "@/lib/neon"
+import { NextRequest, NextResponse } from "next/server";
+import { sql } from "@/lib/neon";
 
-export const runtime = "edge"
+export const runtime = "edge";
 
 export async function GET(req: NextRequest) {
-  const username = req.nextUrl.searchParams.get("username")
-  if (!username) return NextResponse.json({ error: "Falta username" }, { status: 400 })
+  const username = req.nextUrl.searchParams.get("username");
+  if (!username) return NextResponse.json({ error: "Falta username" }, { status: 400 });
 
   const result = await sql`
     SELECT twofa_activated FROM users WHERE username = ${username} LIMIT 1
-  `
-  const user = result[0]
-  if (!user) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 })
-  return NextResponse.json({ twofa_activated: user.twofa_activated })
+  `;
+  const user = result[0];
+  if (!user) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+
+  return NextResponse.json({ twofa_activated: user.twofa_activated });
 }

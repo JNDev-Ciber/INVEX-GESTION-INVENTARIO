@@ -1,6 +1,8 @@
-export const runtime = "edge";
+// file: app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/neon";
+
+export const runtime = "edge";
 
 export async function POST(req: NextRequest) {
   const { username, password } = await req.json();
