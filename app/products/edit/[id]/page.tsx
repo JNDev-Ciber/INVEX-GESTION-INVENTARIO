@@ -2,11 +2,21 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ProductForm } from "@/components/product-form"
-import { useInventoryNeon } from "@/hooks/use-inventory-neon"
+import dynamic from 'next/dynamic'
 import { useToast } from "@/hooks/use-toast"
 import type { Product } from "@/types/inventory"
+
 export const runtime = 'edge'
+
+// ✅ Carga el formulario dinámicamente
+const ProductForm = dynamic(() => 
+  import("@/components/product-form").then(mod => ({ default: mod.ProductForm })),
+  { 
+    loading: () => <div className="container mx-auto p-6">Cargando formulario...</div>,
+    ssr: false 
+  }
+)
+
 interface PageProps {
   params: Promise<{ id: string }>
 }
@@ -14,39 +24,58 @@ interface PageProps {
 export default function EditProductPage({ params }: PageProps) {
   const [productId, setProductId] = useState<string>("")
   const [productData, setProductData] = useState<Product | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [existingCodes, setExistingCodes] = useState<string[]>([])
   const router = useRouter()
   const { toast } = useToast()
-  
-  const {
-    products,
-    updateProduct,
-    loading: inventoryLoading
-  } = useInventoryNeon()
 
-  // ✅ Extraer el ID de los params asíncronos
+  // ✅ Extraer el ID y cargar solo este producto
   useEffect(() => {
-    const extractParams = async () => {
-      const resolvedParams = await params
-      setProductId(resolvedParams.id)
+    const loadProduct = async () => {
+      try {
+        const resolvedParams = await params
+        setProductId(resolvedParams.id)
+        
+        // Cargar solo este producto
+        const response = await fetch(`/api/products/${resolvedParams.id}`)
+        if (!response.ok) throw new Error('Producto no encontrado')
+        
+        const product = await response.json()
+        setProductData(product)
+        
+        // Opcionalmente, cargar solo los códigos existentes (mucho más liviano)
+        const codesResponse = await fetch('/api/products/codes')
+        if (codesResponse.ok) {
+          const codes = await codesResponse.json()
+          setExistingCodes(codes.filter((c: string) => c !== product.code))
+        }
+      } catch (error) {
+        toast({
+          title: "❌ Error",
+          description: "No se pudo cargar el producto.",
+          variant: "destructive"
+        })
+        router.push("/")
+      } finally {
+        setLoading(false)
+      }
     }
-    
-    extractParams()
-  }, [params])
 
-  // ✅ Buscar el producto cuando tenemos el ID
-  useEffect(() => {
-    if (productId && products.length > 0) {
-      const product = products.find(p => p.id === productId)
-      setProductData(product || null)
-    }
-  }, [productId, products])
+    loadProduct()
+  }, [params, router, toast])
 
-  // ✅ Función para manejar la actualización
+  // ✅ Función para actualizar
   const handleUpdateProduct = async (updatedData: Omit<Product, "id" | "createdAt" | "updatedAt">) => {
     if (!productData) return
 
     try {
-      await updateProduct(productData.id, updatedData)
+      const response = await fetch(`/api/products/${productData.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedData)
+      })
+
+      if (!response.ok) throw new Error('Error al actualizar')
       
       toast({
         title: "✅ Producto actualizado",
@@ -64,13 +93,11 @@ export default function EditProductPage({ params }: PageProps) {
     }
   }
 
-  // ✅ Función para cancelar
   const handleCancel = () => {
     router.push("/")
   }
 
-  // ✅ Loading state
-  if (inventoryLoading || !productData) {
+  if (loading || !productData) {
     return <div className="container mx-auto p-6">Cargando producto...</div>
   }
 
@@ -83,8 +110,8 @@ export default function EditProductPage({ params }: PageProps) {
         editing={true}
         isEditing={true}
         initialData={productData}
-        existingCodes={products.map(p => p.code).filter(code => code !== productData.code)}
-        products={products}
+        existingCodes={existingCodes}
+        products={[]} 
       />
     </div>
   )
