@@ -6,7 +6,7 @@ import { ProductForm } from "@/components/product-form"
 import { useInventoryNeon } from "@/hooks/use-inventory-neon"
 import { useToast } from "@/hooks/use-toast"
 import type { Product } from "@/types/inventory"
-
+export const runtime = 'edge'
 interface PageProps {
   params: Promise<{ id: string }>
 }
