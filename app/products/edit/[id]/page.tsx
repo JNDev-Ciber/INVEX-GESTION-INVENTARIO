@@ -1,88 +1,78 @@
-"use client";
+"use client"
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic"; // ✅ Dejá este
-import { useInventoryNeon } from "@/hooks/use-inventory-neon";
-import { useToast } from "@/hooks/use-toast";
-import type { Product } from "@/types/inventory";
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { ProductForm } from "@/components/product-form"
+import { useInventoryNeon } from "@/hooks/use-inventory-neon"
+import { useToast } from "@/hooks/use-toast"
+import type { Product } from "@/types/inventory"
 
-export const runtime = "edge";
-
-// ✅ Solo el import dinámico
-const ProductForm = dynamic(
-  () =>
-    import("@/components/product-form").then((mod) => ({
-      default: mod.ProductForm,
-    })),
-  {
-    loading: () => <div className="container mx-auto p-6">Cargando...</div>,
-    ssr: false,
-  }
-);
+export const runtime = "edge"  
 
 interface PageProps {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string }>
 }
 
 export default function EditProductPage({ params }: PageProps) {
-  const [productId, setProductId] = useState<string>("");
-  const [productData, setProductData] = useState<Product | null>(null);
-  const router = useRouter();
-  const { toast } = useToast();
-
+  const [productId, setProductId] = useState<string>("")
+  const [productData, setProductData] = useState<Product | null>(null)
+  const router = useRouter()
+  const { toast } = useToast()
+  
   const {
     products,
     updateProduct,
-    loading: inventoryLoading,
-  } = useInventoryNeon();
+    loading: inventoryLoading
+  } = useInventoryNeon()
 
+  // ✅ Extraer el ID de los params asíncronos
   useEffect(() => {
     const extractParams = async () => {
-      const resolvedParams = await params;
-      setProductId(resolvedParams.id);
-    };
+      const resolvedParams = await params
+      setProductId(resolvedParams.id)
+    }
+    
+    extractParams()
+  }, [params])
 
-    extractParams();
-  }, [params]);
-
+  // ✅ Buscar el producto cuando tenemos el ID
   useEffect(() => {
     if (productId && products.length > 0) {
-      const product = products.find((p) => p.id === productId);
-      setProductData(product || null);
+      const product = products.find(p => p.id === productId)
+      setProductData(product || null)
     }
-  }, [productId, products]);
+  }, [productId, products])
 
-  const handleUpdateProduct = async (
-    updatedData: Omit<Product, "id" | "createdAt" | "updatedAt">
-  ) => {
-    if (!productData) return;
+  // ✅ Función para manejar la actualización (REQUERIDA)
+  const handleUpdateProduct = async (updatedData: Omit<Product, "id" | "createdAt" | "updatedAt">) => {
+    if (!productData) return
 
     try {
-      await updateProduct(productData.id, updatedData);
-
+      await updateProduct(productData.id, updatedData)
+      
       toast({
         title: "✅ Producto actualizado",
         description: `${updatedData.name} se actualizó correctamente.`,
-        duration: 3000,
-      });
-
-      router.push("/");
+        duration: 3000
+      })
+      
+      router.push("/")
     } catch (error) {
       toast({
         title: "❌ Error al actualizar",
         description: "No se pudo actualizar el producto.",
-        variant: "destructive",
-      });
+        variant: "destructive"
+      })
     }
-  };
+  }
 
   const handleCancel = () => {
-    router.push("/");
-  };
+    router.push("/")
+  }
 
+  // ✅ Loading state
   if (inventoryLoading || !productData) {
-    return <div className="container mx-auto p-6">Cargando producto...</div>;
+    return <div className="container mx-auto p-6">Cargando producto...</div>
   }
 
   return (
@@ -94,11 +84,9 @@ export default function EditProductPage({ params }: PageProps) {
         editing={true}
         isEditing={true}
         initialData={productData}
-        existingCodes={products
-          .map((p) => p.code)
-          .filter((code) => code !== productData.code)}
+        existingCodes={products.map(p => p.code).filter(code => code !== productData.code)}
         products={products}
       />
     </div>
-  );
+  )
 }
