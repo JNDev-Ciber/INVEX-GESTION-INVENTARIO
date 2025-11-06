@@ -27,8 +27,10 @@ function base32ToBytes(base32: string) {
 async function generateTOTP(secret: string, time = Date.now()) {
   const key = base32ToBytes(secret)
   const counter = Math.floor(time / 30000)
-  const counterBytes = new ArrayBuffer(8)
-  const view = new DataView(counterBytes)
+  
+  // ✅ CAMBIO: Crear directamente un Uint8Array en lugar de ArrayBuffer
+  const counterBytes = new Uint8Array(8)
+  const view = new DataView(counterBytes.buffer)
   view.setUint32(4, counter)
 
   const cryptoKey = await crypto.subtle.importKey(
@@ -39,6 +41,7 @@ async function generateTOTP(secret: string, time = Date.now()) {
     ["sign"]
   )
 
+  // ✅ AHORA FUNCIONA: counterBytes es Uint8Array, no ArrayBuffer
   const hmac = new Uint8Array(
     await crypto.subtle.sign("HMAC", cryptoKey, counterBytes)
   )
@@ -52,6 +55,7 @@ async function generateTOTP(secret: string, time = Date.now()) {
 
   return (code % 1000000).toString().padStart(6, "0")
 }
+
 
 export async function POST(req: NextRequest) {
   const { username, code } = await req.json()

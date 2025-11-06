@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useTheme } from "next-themes"
 import {
   Table,
@@ -30,6 +30,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -50,10 +57,16 @@ import {
   List,
   ChevronDown,
   Tag,
+  Barcode,
+  AlertCircle,
+  Check,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react"
 import type { Product, Movement, PriceHistory } from "../types/inventory"
 import { exportInventoryToExcel, exportInventoryToHTML } from "../lib/excel-export"
 import { useToast } from "@/hooks/use-toast"
+
 
 interface ProductListTableProps {
   products: Product[]
@@ -61,9 +74,11 @@ interface ProductListTableProps {
   onDelete: (productId: string) => void
   onQuickSale: (product: Product) => void
   onQuickStock: (product: Product) => void
+  onBarcodeSave: (productId: string, barcode: string) => void
   getMovementsByProduct: (productId: string) => Movement[]
   getPriceHistoryByProduct: (productId: string) => PriceHistory[]
 }
+
 
 export function ProductListTable({
   products,
@@ -71,6 +86,7 @@ export function ProductListTable({
   onDelete,
   onQuickSale,
   onQuickStock,
+  onBarcodeSave,
   getMovementsByProduct,
   getPriceHistoryByProduct,
 }: ProductListTableProps) {
@@ -82,13 +98,18 @@ export function ProductListTable({
   const [selectedSubcategory, setSelectedSubcategory] = useState("all")
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
   const [isMobile, setIsMobile] = useState(false)
+  const [barcodeDialogOpen, setBarcodeDialogOpen] = useState(false)
+  const [selectedProductForBarcode, setSelectedProductForBarcode] = useState<Product | null>(null)
+  const [barcodeInput, setBarcodeInput] = useState("")
+  const [isSavingBarcode, setIsSavingBarcode] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE = 50
 
-  // Evitar hidratación incorrecta y detectar móvil
+
   useEffect(() => {
     setMounted(true)
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768)
-      // En móvil, usar vista de grid por defecto
       if (window.innerWidth < 768) {
         setViewMode('grid')
       }
@@ -99,42 +120,101 @@ export function ProductListTable({
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
+  // Resetear página cuando cambian filtros
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [selectedCategory, selectedSubcategory, searchTerm])
+
+
   const isDark = mounted && (resolvedTheme === 'dark' || theme === 'dark')
 
-  // Categorías y subcategorías únicas
-  const categories = [...new Set(products.map(p => p.category))]
-  const allSubcategories = [...new Set(products.map(p => p.subcategory).filter(Boolean))]
+
+  // ✅ MEMORIZAR CÁLCULOS
+  const categories = useMemo(() => 
+    [...new Set(products.map(p => p.category))],
+    [products]
+  )
+
+  const allSubcategories = useMemo(() => 
+    [...new Set(products.map(p => p.subcategory).filter(Boolean))],
+    [products]
+  )
   
-  // Filtrar subcategorías por categoría seleccionada
-  const filteredSubcategories = selectedCategory === "all" 
-    ? allSubcategories 
-    : [...new Set(products
-        .filter(p => p.category === selectedCategory)
-        .map(p => p.subcategory)
-        .filter(Boolean)
-      )]
+  const filteredSubcategories = useMemo(() => 
+    selectedCategory === "all" 
+      ? allSubcategories 
+      : [...new Set(products
+          .filter(p => p.category === selectedCategory)
+          .map(p => p.subcategory)
+          .filter(Boolean)
+        )],
+    [selectedCategory, allSubcategories, products]
+  )
 
-  // Resetear subcategoría cuando cambia la categoría
-  useEffect(() => {
-    if (selectedCategory !== "all" && selectedSubcategory !== "all") {
-      const isSubcategoryValid = filteredSubcategories.includes(selectedSubcategory)
-      if (!isSubcategoryValid) {
-        setSelectedSubcategory("all")
-      }
+  const filteredProducts = useMemo(() => 
+    products.filter(product => {
+      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           product.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (product.subcategory && product.subcategory.toLowerCase().includes(searchTerm.toLowerCase()))
+      
+      const matchesCategory = selectedCategory === "all" || product.category === selectedCategory
+      const matchesSubcategory = selectedSubcategory === "all" || product.subcategory === selectedSubcategory
+      
+      return matchesSearch && matchesCategory && matchesSubcategory
+    }),
+    [products, searchTerm, selectedCategory, selectedSubcategory]
+  )
+
+  // Paginación
+  const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE)
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+  const endIndex = startIndex + ITEMS_PER_PAGE
+  const paginatedProducts = filteredProducts.slice(startIndex, endIndex)
+
+
+  const handleOpenBarcodeDialog = (product: Product) => {
+    setSelectedProductForBarcode(product)
+    setBarcodeInput("")
+    setBarcodeDialogOpen(true)
+  }
+
+
+  const handleSaveBarcode = async () => {
+    if (!barcodeInput.trim()) {
+      toast({
+        title: "Error",
+        description: "Por favor ingresa un código de barras",
+        variant: "destructive",
+      })
+      return
     }
-  }, [selectedCategory, filteredSubcategories, selectedSubcategory])
 
-  // Filtrar productos
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (product.subcategory && product.subcategory.toLowerCase().includes(searchTerm.toLowerCase()))
-    
-    const matchesCategory = selectedCategory === "all" || product.category === selectedCategory
-    const matchesSubcategory = selectedSubcategory === "all" || product.subcategory === selectedSubcategory
-    
-    return matchesSearch && matchesCategory && matchesSubcategory
-  })
+    if (!selectedProductForBarcode) return
+
+    setIsSavingBarcode(true)
+    try {
+      await onBarcodeSave(selectedProductForBarcode.id, barcodeInput)
+      
+      toast({
+        title: "✓ Código guardado",
+        description: `Código de barras agregado a ${selectedProductForBarcode.name}`,
+        duration: 3000,
+      })
+      
+      setBarcodeDialogOpen(false)
+      setBarcodeInput("")
+      setSelectedProductForBarcode(null)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo guardar el código de barras",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingBarcode(false)
+    }
+  }
+
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString("es-AR", {
@@ -143,6 +223,7 @@ export function ProductListTable({
       minimumFractionDigits: 0,
     })
   }
+
 
   const getStockStatus = (product: Product) => {
     if (product.quantity <= 0) {
@@ -169,25 +250,27 @@ export function ProductListTable({
     }
   }
 
+
   const getMarginColor = (margin: number) => {
     if (margin > 50) return isDark ? "text-green-400" : "text-green-600"
     if (margin > 20) return isDark ? "text-yellow-400" : "text-yellow-600"
     return isDark ? "text-red-400" : "text-red-600"
   }
 
-  // Componente de Card para vista móvil
+
   const ProductCard = ({ product }: { product: Product }) => {
     const stockStatus = getStockStatus(product)
     const margin = product.price > 0 ? ((product.price - product.cost) / product.price) * 100 : 0
     const movements = getMovementsByProduct(product.id)
     const priceHistory = getPriceHistoryByProduct(product.id)
+    const hasBarcode = product.barcode && product.barcode.trim() !== ""
+
 
     return (
       <Card className={`transition-all duration-200 hover:shadow-lg ${
         isDark ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'
       }`}>
         <CardContent className="p-4">
-          {/* Header del producto */}
           <div className="flex justify-between items-start mb-3">
             <div className="flex-1">
               <h3 className={`font-semibold text-lg ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
@@ -214,7 +297,28 @@ export function ProductListTable({
             </Badge>
           </div>
 
-          {/* Información de precios y stock */}
+
+          {hasBarcode ? (
+            <div className={`mb-3 p-2 rounded-md flex items-center gap-2 ${
+              isDark ? 'bg-green-900/30 border border-green-800' : 'bg-green-50 border border-green-300'
+            }`}>
+              <Check className={`w-4 h-4 ${isDark ? 'text-green-400' : 'text-green-600'}`} />
+              <span className={`text-xs font-mono ${isDark ? 'text-green-300' : 'text-green-700'}`}>
+                {product.barcode}
+              </span>
+            </div>
+          ) : (
+            <div className={`mb-3 p-2 rounded-md flex items-center gap-2 ${
+              isDark ? 'bg-yellow-900/30 border border-yellow-800' : 'bg-yellow-50 border border-yellow-300'
+            }`}>
+              <AlertCircle className={`w-4 h-4 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`} />
+              <span className={`text-xs ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
+                Sin código de barras
+              </span>
+            </div>
+          )}
+
+
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Precio</p>
@@ -242,14 +346,14 @@ export function ProductListTable({
             </div>
           </div>
 
-          {/* Descripción si existe */}
+
           {product.description && (
             <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-4 line-clamp-2`}>
               {product.description}
             </p>
           )}
 
-          {/* Botones de acción */}
+
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -279,6 +383,21 @@ export function ProductListTable({
               <Package className="h-4 w-4 mr-2" />
               Stock
             </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleOpenBarcodeDialog(product)}
+              className={`${
+                isDark 
+                  ? 'hover:bg-purple-800 hover:text-purple-300 hover:border-purple-600' 
+                  : 'hover:bg-purple-100 hover:text-purple-700 hover:border-purple-300'
+              }`}
+              title="Agregar código de barras"
+            >
+              <Barcode className="h-4 w-4" />
+            </Button>
+
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -329,7 +448,7 @@ export function ProductListTable({
     )
   }
 
-  // No renderizar hasta que esté montado
+
   if (!mounted) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -337,6 +456,7 @@ export function ProductListTable({
       </div>
     )
   }
+
 
   if (products.length === 0) {
     return (
@@ -352,11 +472,10 @@ export function ProductListTable({
     )
   }
 
+
   return (
     <div className="space-y-4">
-      {/* Header con filtros y controles responsive */}
       <div className="flex flex-col space-y-4">
-        {/* Búsqueda y selector de vista */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -368,7 +487,6 @@ export function ProductListTable({
             />
           </div>
           
-          {/* Controles de vista - Solo en desktop */}
           {!isMobile && (
             <div className="flex items-center gap-2">
               <Button
@@ -393,10 +511,9 @@ export function ProductListTable({
           )}
         </div>
 
-        {/* Filtros y exportación */}
+
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <div className="flex flex-wrap gap-2">
-            {/* Selector de categoría */}
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
@@ -414,7 +531,7 @@ export function ProductListTable({
               ))}
             </select>
 
-            {/* Selector de subcategoría */}
+
             <select
               value={selectedSubcategory}
               onChange={(e) => setSelectedSubcategory(e.target.value)}
@@ -442,7 +559,7 @@ export function ProductListTable({
               ))}
             </select>
 
-            {/* Indicador de filtros activos */}
+
             {(selectedCategory !== "all" || selectedSubcategory !== "all") && (
               <Button
                 variant="ghost"
@@ -457,6 +574,7 @@ export function ProductListTable({
               </Button>
             )}
           </div>
+
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -500,16 +618,14 @@ export function ProductListTable({
         </div>
       </div>
 
-      {/* Vista condicional: Grid para móvil, tabla para desktop */}
+
       {viewMode === 'grid' || isMobile ? (
-        /* Vista de Grid/Cards responsive */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredProducts.map((product) => (
+          {paginatedProducts.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}
         </div>
       ) : (
-        /* Vista de Tabla - Solo desktop */
         <div className="rounded-md border overflow-hidden">
           <div className="overflow-x-auto">
             <Table>
@@ -525,6 +641,9 @@ export function ProductListTable({
                   </TableHead>
                   <TableHead className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                     Subcategoría
+                  </TableHead>
+                  <TableHead className={`font-semibold ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                    Código Barras
                   </TableHead>
                   <TableHead className={`font-semibold text-right ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                     Precio
@@ -547,11 +666,13 @@ export function ProductListTable({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredProducts.map((product) => {
+                {paginatedProducts.map((product) => {
                   const stockStatus = getStockStatus(product)
                   const margin = product.price > 0 ? ((product.price - product.cost) / product.price) * 100 : 0
                   const movements = getMovementsByProduct(product.id)
                   const priceHistory = getPriceHistoryByProduct(product.id)
+                  const hasBarcode = product.barcode && product.barcode.trim() !== ""
+
 
                   return (
                     <TableRow
@@ -578,11 +699,13 @@ export function ProductListTable({
                         </div>
                       </TableCell>
 
+
                       <TableCell>
                         <Badge variant="outline" className="text-xs">
                           {product.category}
                         </Badge>
                       </TableCell>
+
 
                       <TableCell>
                         {product.subcategory ? (
@@ -597,17 +720,55 @@ export function ProductListTable({
                         )}
                       </TableCell>
 
+
+                      <TableCell>
+                        {hasBarcode ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenBarcodeDialog(product)}
+                            className={`font-mono text-xs ${
+                              isDark 
+                                ? 'hover:bg-green-900 hover:text-green-300' 
+                                : 'hover:bg-green-100 hover:text-green-700'
+                            }`}
+                            title="Editar código de barras"
+                          >
+                            <Check className="w-3 h-3 mr-1" />
+                            {product.barcode}
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenBarcodeDialog(product)}
+                            className={`text-xs ${
+                              isDark 
+                                ? 'hover:bg-purple-900 hover:text-purple-300 hover:border-purple-600' 
+                                : 'hover:bg-purple-100 hover:text-purple-700 hover:border-purple-300'
+                            }`}
+                            title="Agregar código de barras"
+                          >
+                            <Barcode className="w-3 h-3 mr-1" />
+                            Agregar
+                          </Button>
+                        )}
+                      </TableCell>
+
+
                       <TableCell className="text-right">
                         <div className={`font-medium ${isDark ? 'text-green-400' : 'text-green-600'}`}>
                           {formatCurrency(product.price)}
                         </div>
                       </TableCell>
 
+
                       <TableCell className="text-right">
                         <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                           {formatCurrency(product.cost)}
                         </div>
                       </TableCell>
+
 
                       <TableCell className="text-right">
                         <div className="space-y-1">
@@ -626,6 +787,7 @@ export function ProductListTable({
                         </div>
                       </TableCell>
 
+
                       <TableCell className="text-right">
                         <div className={`font-medium ${getMarginColor(margin)}`}>
                           {margin.toFixed(1)}%
@@ -635,6 +797,7 @@ export function ProductListTable({
                         </div>
                       </TableCell>
 
+
                       <TableCell>
                         <Badge variant={stockStatus.variant} className="text-xs">
                           <stockStatus.icon className="w-3 h-3 mr-1" />
@@ -642,9 +805,9 @@ export function ProductListTable({
                         </Badge>
                       </TableCell>
 
+
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
-                          {/* Botones de acción rápida */}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -660,6 +823,7 @@ export function ProductListTable({
                             <ShoppingCart className="h-3 w-3" />
                           </Button>
 
+
                           <Button
                             variant="ghost"
                             size="sm"
@@ -674,7 +838,7 @@ export function ProductListTable({
                             <Package className="h-3 w-3" />
                           </Button>
 
-                          {/* Menú de opciones */}
+
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button 
@@ -729,10 +893,107 @@ export function ProductListTable({
         </div>
       )}
 
-      {/* Información adicional responsive */}
+
+      {/* PAGINACIÓN */}
+      {totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border rounded-lg">
+          <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+            Página {currentPage} de {totalPages} ({filteredProducts.length} productos)
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="flex items-center gap-1"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </Button>
+            
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const page = currentPage > 3 ? currentPage - 2 + i : i + 1
+                if (page > totalPages) return null
+                return (
+                  <Button
+                    key={page}
+                    variant={page === currentPage ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setCurrentPage(page)}
+                    className="w-10 h-10"
+                  >
+                    {page}
+                  </Button>
+                )
+              })}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="flex items-center gap-1"
+            >
+              Siguiente
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+
+      {/* DIALOG GLOBAL PARA CÓDIGO DE BARRAS */}
+      <Dialog open={barcodeDialogOpen} onOpenChange={setBarcodeDialogOpen}>
+        <DialogContent className={`${isDark ? 'bg-gray-900 border-gray-700' : ''}`}>
+          <DialogHeader>
+            <DialogTitle>Agregar Código de Barras</DialogTitle>
+            <DialogDescription>
+              Escanea o ingresa el código de barras para {selectedProductForBarcode?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="barcode-input">Código de Barras</Label>
+              <Input
+                id="barcode-input"
+                placeholder="Escanea aquí..."
+                value={barcodeInput}
+                onChange={(e) => setBarcodeInput(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSaveBarcode()
+                  }
+                }}
+                autoFocus
+                className={isDark ? 'bg-gray-800 border-gray-700' : ''}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSaveBarcode}
+                disabled={isSavingBarcode || !barcodeInput.trim()}
+                className="flex-1"
+              >
+                {isSavingBarcode ? 'Guardando...' : 'Guardar'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setBarcodeDialogOpen(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-sm text-muted-foreground">
         <div>
-          Mostrando {filteredProducts.length} de {products.length} productos
+          Mostrando {paginatedProducts.length} de {filteredProducts.length} productos
           {(selectedCategory !== "all" || selectedSubcategory !== "all") && (
             <span className="ml-2 text-blue-600 dark:text-blue-400">
               (filtrado)

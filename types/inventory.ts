@@ -12,6 +12,7 @@ export interface Product {
   imageUrl?: string
   createdAt: string
   updatedAt: string
+  barcode?: string 
 }
 
 
@@ -25,6 +26,39 @@ export interface Movement {
   previousQuantity: number
   newQuantity: number
 }
+
+export interface VentaFiadoDetalle {
+  id: number;
+  ventaFiadoId: number;
+  productoId: string;
+  productoNombre: string;
+  cantidad: number;
+  precioUnitario: number;
+  subtotal: number;
+  pagado: boolean;
+  pagadoEn?: string;
+}
+
+export interface VentaFiado {
+  id: number;
+  clienteId: number;
+  fecha: string;
+  total: number;
+  saldoPendiente: number;
+  detalles?: VentaFiadoDetalle[];
+  createdAt: string;
+}
+
+export interface ClienteVenta {
+  id: number;
+  nombre: string;
+  telefono?: string;
+  cuit?: string;
+  email?: string;
+  direccion?: string;
+  saldoPendiente: number;
+}
+
 
 export interface PriceHistory {
   id: string

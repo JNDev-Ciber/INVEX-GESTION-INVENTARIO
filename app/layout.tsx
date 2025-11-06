@@ -1,10 +1,10 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
-import "./globals.css"
+import "../app/styles/globals.css"
 import { ThemeProvider } from "next-themes"
 import { Toaster } from "@/components/ui/toaster"
-
+<html lang="es" suppressHydrationWarning></html>
 const inter = Inter({ 
   subsets: ["latin"],
   display: 'swap',
@@ -12,28 +12,27 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "ELECTROLUXSTORE - Sistema de Inventario",
+  title: "INVEX - Sistema de Inventario",
   description: "Sistema completo de gestión de inventario para productos tecnológicos",
   keywords: ["inventario", "gestión", "productos", "descartables", "facturación", "stock", "ovidio"],
-  authors: [{ name: "ELECTROLUXSTORE Team" }],
-  creator: "ELECTROLUXSTORE",
-  publisher: "ELECTROLUXSTORE",
+  authors: [{ name: "JN SOFT" }],
+  creator: "JN SOFT",
+  publisher: "JN SOFT",
   formatDetection: {
     email: false,
     address: false,
     telephone: false,
   },
-  metadataBase: new URL('https://ovidio-descartables.com'),
   openGraph: {
-    title: "ELECTROLUXSTORE - Sistema de Inventario",
+    title: "INVEX - Sistema de Inventario",
     description: "Sistema completo de gestión de inventario para productos descartables",
     type: "website",
     locale: "es_ES",
-    siteName: "ELECTROLUXSTORE",
+    siteName: "INVEX",
   },
   twitter: {
     card: "summary_large_image",
-    title: "ELECTROLUXSTORE - Sistema de Inventario",
+    title: "INVEX - Sistema de Inventario",
     description: "Sistema completo de gestión de inventario para productos descartables",
   },
   robots: {
@@ -51,7 +50,7 @@ export const metadata: Metadata = {
     google: 'your-google-verification-code',
   },
   generator: 'Next.js',
-  applicationName: 'ELECTROLUXSTORE', 
+  applicationName: 'INVEX', 
   referrer: 'origin-when-cross-origin',
   category: 'business',
 }
