@@ -188,17 +188,39 @@ export function ProductListTable({
       })
       return
     }
-
+  
     if (!selectedProductForBarcode) return
-
+  
+    // 🔴 VALIDAR ANTES DE GUARDAR
+    const cleanedBarcode = barcodeInput.trim().replace(/\s+/g, '')
+    
+    if (!/^\d{5,}$/.test(cleanedBarcode)) {
+      toast({
+        title: "❌ Código inválido",
+        description: "Solo números, mínimo 5 dígitos",
+        variant: "destructive",
+      })
+      return
+    }
+  
     setIsSavingBarcode(true)
     try {
-      await onBarcodeSave(selectedProductForBarcode.id, barcodeInput)
+      await onBarcodeSave(selectedProductForBarcode.id, cleanedBarcode)
+      
+      // 🔴 ACTUALIZAR EL ESTADO LOCAL INMEDIATAMENTE
+      // Esta es la clave - actualizar el producto en memoria
+      const updatedProduct = {
+        ...selectedProductForBarcode,
+        barcode: cleanedBarcode
+      }
+      
+      // Notificar al componente padre que necesita refetch
+      // O mejor aún, actualizar localmente si tienes acceso a setProducts
       
       toast({
         title: "✓ Código guardado",
-        description: `Código de barras agregado a ${selectedProductForBarcode.name}`,
-        duration: 3000,
+        description: `${cleanedBarcode}`,
+        duration: 2000,
       })
       
       setBarcodeDialogOpen(false)
@@ -207,13 +229,14 @@ export function ProductListTable({
     } catch (error) {
       toast({
         title: "Error",
-        description: "No se pudo guardar el código de barras",
+        description: "No se pudo guardar el código",
         variant: "destructive",
       })
     } finally {
       setIsSavingBarcode(false)
     }
   }
+  
 
 
   const formatCurrency = (value: number) => {

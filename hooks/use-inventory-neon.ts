@@ -119,6 +119,7 @@ export function useInventoryNeon() {
         minStock: 4,
         description: "Datos de ejemplo - Notebook Intel Core i5, 8GB RAM",
         imageUrl: "",
+        barcode: "",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
@@ -134,6 +135,7 @@ export function useInventoryNeon() {
         minStock: 8,
         description: "Datos de ejemplo - Teclado mecánico gaming",
         imageUrl: "",
+        barcode: "",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
@@ -149,6 +151,7 @@ export function useInventoryNeon() {
         minStock: 4,
         description: "Datos de ejemplo - Notebook gaming",
         imageUrl: "",
+        barcode: "",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       },
@@ -167,7 +170,7 @@ export function useInventoryNeon() {
       setError(null);
       console.log("📊 Cargando datos desde Neon...");
 
-      // Cargar productos con categorías, subcategorías y descripción usando JOIN
+      // ✅ AGREGADO: p.codigo_barras en el SELECT
       const productosData = await sql`
         SELECT 
           p.id,
@@ -180,6 +183,7 @@ export function useInventoryNeon() {
           p.precio_venta,
           p.valor_total,
           p.imagen_url,
+          p.codigo_barras,
           c.nombre as categoria_nombre,
           s.nombre as subcategoria_nombre
         FROM productos p
@@ -237,7 +241,7 @@ export function useInventoryNeon() {
 
       console.log("✅ Ventas a crédito cargadas:", ventasData?.length || 0);
 
-      // Mapear productos al formato esperado
+      // ✅ AGREGADO: barcode en el mapeo
       const mappedProducts: Product[] = (productosData || []).map(
         (item: any) => ({
           id: item.id,
@@ -251,6 +255,7 @@ export function useInventoryNeon() {
           minStock: item.stock_minimo,
           description: item.descripcion || "",
           imageUrl: item.imagen_url || "",
+          barcode: item.codigo_barras || "",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         })
@@ -397,31 +402,32 @@ export function useInventoryNeon() {
       throw new Error(errorMessage);
     }
   };
+
   // AGREGAR CLIENTE
-const addCliente = async (
-  nombre: string,
-  cuit: string,
-  telefono: string
-) => {
-  try {
-    setError(null);
-    if (connectionStatus === "offline")
-      throw new Error("No hay conexión a la base de datos.");
+  const addCliente = async (
+    nombre: string,
+    cuit: string,
+    telefono: string
+  ) => {
+    try {
+      setError(null);
+      if (connectionStatus === "offline")
+        throw new Error("No hay conexión a la base de datos.");
 
-    await sql`
-      INSERT INTO clientes_ventas (nombre, cuit, telefono)
-      VALUES (${nombre}, ${cuit}, ${telefono})
-    `;
+      await sql`
+        INSERT INTO clientes_ventas (nombre, cuit, telefono)
+        VALUES (${nombre}, ${cuit}, ${telefono})
+      `;
 
-    await loadAllData();
-    return true;
-  } catch (err) {
-    const errorMessage =
-      err instanceof Error ? err.message : "Error al agregar cliente";
-    setError(errorMessage);
-    throw new Error(errorMessage);
-  }
-};
+      await loadAllData();
+      return true;
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Error al agregar cliente";
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  };
 
   // Actualizar producto
   const updateProduct = async (id: string, updates: any) => {
@@ -841,112 +847,110 @@ const addCliente = async (
   // ===== FUNCIONES DE VENTAS A CRÉDITO =====
 
   // REGISTRAR VENTA FIADO
- // REGISTRAR VENTA FIADO
-const addVentaFiado = async (
-  clienteId: number,
-  productos: Array<{ productoId: string; cantidad: number }>
-) => {
-  try {
-    setError(null);
-    if (connectionStatus === "offline")
-      throw new Error("No hay conexión a la base de datos.");
+  const addVentaFiado = async (
+    clienteId: number,
+    productos: Array<{ productoId: string; cantidad: number }>
+  ) => {
+    try {
+      setError(null);
+      if (connectionStatus === "offline")
+        throw new Error("No hay conexión a la base de datos.");
 
-    let total = 0;
-    const productosConPrecio: any[] = [];
+      let total = 0;
+      const productosConPrecio: any[] = [];
 
-    // Obtener cliente nombre
-    const clienteData = await sql`
-      SELECT nombre FROM clientes_ventas WHERE id = ${clienteId}
-    `;
-    const clienteNombre = clienteData[0]?.nombre || `Cliente ${clienteId}`;
+      // Obtener cliente nombre
+      const clienteData = await sql`
+        SELECT nombre FROM clientes_ventas WHERE id = ${clienteId}
+      `;
+      const clienteNombre = clienteData[0]?.nombre || `Cliente ${clienteId}`;
 
-    // Obtener precios y validar stock
-    for (const item of productos) {
-      const prod = await sql`
-        SELECT precio_venta, stock_actual, nombre FROM productos WHERE id = ${item.productoId}
+      // Obtener precios y validar stock
+      for (const item of productos) {
+        const prod = await sql`
+          SELECT precio_venta, stock_actual, nombre FROM productos WHERE id = ${item.productoId}
+        `;
+
+        if (prod.length === 0) throw new Error(`Producto no encontrado`);
+        if (prod[0].stock_actual < item.cantidad)
+          throw new Error(`Stock insuficiente de ${prod[0].nombre}`);
+
+        const subtotal = prod[0].precio_venta * item.cantidad;
+        total += subtotal;
+
+        productosConPrecio.push({
+          productoId: item.productoId,
+          cantidad: item.cantidad,
+          precio: prod[0].precio_venta,
+          nombre: prod[0].nombre,
+          subtotal,
+        });
+      }
+
+      // Crear venta
+      const ventaResult = await sql`
+        INSERT INTO ventas_fiado (cliente_id, total, saldo_pendiente)
+        VALUES (${clienteId}, ${total}, ${total})
+        RETURNING id
       `;
 
-      if (prod.length === 0) throw new Error(`Producto no encontrado`);
-      if (prod[0].stock_actual < item.cantidad)
-        throw new Error(`Stock insuficiente de ${prod[0].nombre}`);
+      const ventaId = ventaResult[0].id;
+      const today = new Date().toISOString().split("T")[0];
 
-      const subtotal = prod[0].precio_venta * item.cantidad;
-      total += subtotal;
+      // Insertar detalles y registrar movimientos
+      for (const item of productosConPrecio) {
+        await sql`
+          INSERT INTO ventas_fiado_detalle 
+          (venta_fiado_id, producto_id, producto_nombre, cantidad, precio_unitario, subtotal)
+          VALUES (${ventaId}, ${item.productoId}, ${item.nombre}, ${item.cantidad}, ${item.precio}, ${item.subtotal})
+        `;
 
-      productosConPrecio.push({
-        productoId: item.productoId,
-        cantidad: item.cantidad,
-        precio: prod[0].precio_venta,
-        nombre: prod[0].nombre,
-        subtotal,
-      });
+        // Obtener stock actual
+        const stockAntes = await sql`
+          SELECT stock_actual FROM productos WHERE id = ${item.productoId}
+        `;
+        const stockActual = stockAntes[0].stock_actual;
+        const stockDespues = stockActual - item.cantidad;
+
+        // Descontar stock
+        await sql`
+          UPDATE productos SET stock_actual = stock_actual - ${item.cantidad}
+          WHERE id = ${item.productoId}
+        `;
+
+        // REGISTRAR MOVIMIENTO CON TIPO FIADO
+        await sql`
+          INSERT INTO movimientos (
+            producto_id, fecha, tipo, cantidad, motivo, 
+            stock_antes, stock_despues, valor_total
+          ) VALUES (
+            ${item.productoId}, 
+            ${today}, 
+            'Salida', 
+            ${item.cantidad}, 
+            ${`FIADO A ${clienteNombre}`},
+            ${stockActual},
+            ${stockDespues},
+            ${item.subtotal}
+          )
+        `;
+      }
+
+      // Actualizar saldo cliente
+      await sql`
+        UPDATE clientes_ventas SET saldo_pendiente = saldo_pendiente + ${total}
+        WHERE id = ${clienteId}
+      `;
+
+      await loadAllData();
+      return { success: true, ventaId, total };
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Error registrando venta";
+      setError(errorMessage);
+      throw new Error(errorMessage);
     }
-
-    // Crear venta
-    const ventaResult = await sql`
-      INSERT INTO ventas_fiado (cliente_id, total, saldo_pendiente)
-      VALUES (${clienteId}, ${total}, ${total})
-      RETURNING id
-    `;
-
-    const ventaId = ventaResult[0].id;
-    const today = new Date().toISOString().split("T")[0];
-
-    // Insertar detalles y registrar movimientos
-    for (const item of productosConPrecio) {
-      await sql`
-        INSERT INTO ventas_fiado_detalle 
-        (venta_fiado_id, producto_id, producto_nombre, cantidad, precio_unitario, subtotal)
-        VALUES (${ventaId}, ${item.productoId}, ${item.nombre}, ${item.cantidad}, ${item.precio}, ${item.subtotal})
-      `;
-
-      // Obtener stock actual
-      const stockAntes = await sql`
-        SELECT stock_actual FROM productos WHERE id = ${item.productoId}
-      `;
-      const stockActual = stockAntes[0].stock_actual;
-      const stockDespues = stockActual - item.cantidad;
-
-      // Descontar stock
-      await sql`
-        UPDATE productos SET stock_actual = stock_actual - ${item.cantidad}
-        WHERE id = ${item.productoId}
-      `;
-
-      // REGISTRAR MOVIMIENTO CON TIPO FIADO
-      await sql`
-        INSERT INTO movimientos (
-          producto_id, fecha, tipo, cantidad, motivo, 
-          stock_antes, stock_despues, valor_total
-        ) VALUES (
-          ${item.productoId}, 
-          ${today}, 
-          'Salida', 
-          ${item.cantidad}, 
-          ${`FIADO A ${clienteNombre}`},
-          ${stockActual},
-          ${stockDespues},
-          ${item.subtotal}
-        )
-      `;
-    }
-
-    // Actualizar saldo cliente
-    await sql`
-      UPDATE clientes_ventas SET saldo_pendiente = saldo_pendiente + ${total}
-      WHERE id = ${clienteId}
-    `;
-
-    await loadAllData();
-    return { success: true, ventaId, total };
-  } catch (err) {
-    const errorMessage =
-      err instanceof Error ? err.message : "Error registrando venta";
-    setError(errorMessage);
-    throw new Error(errorMessage);
-  }
-};
-
+  };
 
   // MARCAR PRODUCTOS COMO PAGADOS
   const marcarProductosPagados = async (
