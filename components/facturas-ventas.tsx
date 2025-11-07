@@ -1,23 +1,39 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import  FacturaVentaPDF  from './factura-venta-pdf'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { PDFDownloadLink, BlobProvider } from '@react-pdf/renderer'
-import { 
-  Receipt, 
-  Plus, 
-  Trash2, 
+import { useState, useEffect, useMemo } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import FacturaVentaPDF from "./factura-venta-pdf";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"; // Add this line
+import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { PDFDownloadLink, BlobProvider } from "@react-pdf/renderer";
+import {
+  Receipt,
+  Plus,
+  Trash2,
   Download,
-  Printer, 
-  User, 
+  Printer,
+  User,
   Calendar,
   Package,
   Eye,
@@ -27,181 +43,347 @@ import {
   Building2,
   DollarSign,
   TrendingDown,
-  Minus
-} from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import { Badge } from "@/components/ui/badge"
-import type { Product } from "../types/inventory"
+  Minus,
+  ChevronsUpDown,
+  BarChart3,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
+import type { ClienteVenta, Product } from "../types/inventory";
 
 interface FacturaVentaItem {
-  id: string
-  producto: Product
-  cantidad: number
-  precioUnitario: number
-  subtotal: number
+  id: string;
+  producto: Product;
+  cantidad: number;
+  precioUnitario: number;
+  subtotal: number;
 }
 
 interface DatosCliente {
-  nombre: string
-  cuit: string
-  direccion?: string
-  telefono?: string
-  email?: string
+  nombre: string;
+  cuit: string;
+  direccion?: string;
+  telefono?: string;
+  email?: string;
 }
 
 interface FacturaVenta {
-  id: string
-  numero: string
-  fecha: string
-  cliente: DatosCliente
-  items: FacturaVentaItem[]
-  subtotal: number
-  iva: number
-  total: number
-  observaciones: string
+  id: string;
+  numero: string;
+  fecha: string;
+  cliente: DatosCliente;
+  items: FacturaVentaItem[];
+  subtotal: number;
+  iva: number;
+  total: number;
+  observaciones: string;
 }
 
 interface Props {
-  products?: Product[]
-  onSaleProduct: (productId: string, quantity: number, reason: string) => Promise<void>
+  products?: Product[];
+  clientes?: ClienteVenta[];
+  onSaleProduct: (
+    productId: string,
+    quantity: number,
+    reason: string
+  ) => Promise<void>;
+  onAddVentaFiado?: (
+    clienteId: number,
+    productos: any[]
+  ) => Promise<{ success: boolean; ventaId: any; total: number }>;
 }
 
-export default function FacturaVentaForm({ 
-  products = [], 
-  onSaleProduct 
+export default function FacturaVentaForm({
+  products = [],
+  clientes = [],
+  onAddVentaFiado,
+  onSaleProduct,
 }: Props) {
-  const { toast } = useToast()
-  
+  const { toast } = useToast();
+  const [showClienteDropdown, setShowClienteDropdown] = useState(false);
+  const [searchClienteTerm, setSearchClienteTerm] = useState("");
+
+  const filteredClientes = useMemo(() => {
+    if (!searchClienteTerm) return clientes;
+    return clientes.filter(
+      (c) =>
+        c.nombre.toLowerCase().includes(searchClienteTerm.toLowerCase()) ||
+        c.cuit?.includes(searchClienteTerm)
+    );
+  }, [clientes, searchClienteTerm]);
+
+  // ⬅️ NUEVA FUNCIÓN - sin cerrar modal
+  const agregarProductoDelModal = (product: Product) => {
+    if (product.quantity <= 0) {
+      toast({
+        title: "❌ Error",
+        description: "Sin stock disponible",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setFacturaActual((prev) => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        {
+          id: Date.now().toString(),
+          producto: product,
+          cantidad: 1,
+          precioUnitario: product.price,
+          subtotal: product.price,
+        },
+      ],
+    }));
+
+    toast({
+      title: "✅ Producto agregado",
+      description: product.name,
+      duration: 1000,
+    });
+
+    // ⬅️ NO cierra el modal
+  };
+
   // Estados principales
   const [facturaActual, setFacturaActual] = useState<FacturaVenta>({
-    id: '',
-    numero: '',
-    fecha: new Date().toISOString().split('T')[0],
+    id: "",
+    numero: "",
+    fecha: new Date().toISOString().split("T")[0],
     cliente: {
-      nombre: '',
-      cuit: '',
-      direccion: '',
-      telefono: '',
-      email: ''
+      nombre: "",
+      cuit: "",
+      direccion: "",
+      telefono: "",
+      email: "",
     },
     items: [],
     subtotal: 0,
     iva: 0,
     total: 0,
-    observaciones: ''
-  })
+    observaciones: "",
+  });
 
+  const [mostrarVistaPrevia, setMostrarVistaPrevia] = useState(false);
+  const [mostrarSelectorProducto, setMostrarSelectorProducto] = useState(false);
 
-  const [mostrarVistaPrevia, setMostrarVistaPrevia] = useState(false)
-  const [mostrarSelectorProducto, setMostrarSelectorProducto] = useState(false)
-  
   // Estados para agregar items
-  const [productoSeleccionado, setProductoSeleccionado] = useState<Product | null>(null)
+  const [productoSeleccionado, setProductoSeleccionado] =
+    useState<Product | null>(null);
   const [nuevoItem, setNuevoItem] = useState({
-    cantidad: '',
-    precioUnitario: ''
-  })
+    cantidad: "",
+    precioUnitario: "",
+  });
 
-  const [porcentajeIva, setPorcentajeIva] = useState(21)
-  const [busquedaProducto, setBusquedaProducto] = useState('')
-  const [isMobile, setIsMobile] = useState(false)
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleDejarAFiado = async () => {
+    if (!facturaActual.cliente.nombre.trim()) {
+      toast({
+        title: "❌ Error",
+        description: "El nombre del cliente es obligatorio",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (facturaActual.items.length === 0) {
+      toast({
+        title: "❌ Error",
+        description: "Agrega al menos un producto",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      // 1. Convertir items al formato correcto
+      const productosVenta = facturaActual.items.map((item) => ({
+        productoId: item.producto.id,
+        cantidad: item.cantidad,
+      }));
+
+      // 2. Buscar el cliente en la BD
+      const clienteEnBD = clientes.find(
+        (c) => c.cuit === facturaActual.cliente.cuit
+      );
+
+      if (!clienteEnBD) {
+        toast({
+          title: "❌ Error",
+          description: "Cliente no encontrado en la base de datos",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // 3. Validar que onAddVentaFiado existe
+      if (!onAddVentaFiado) {
+        toast({
+          title: "❌ Error",
+          description: "Función de venta no disponible",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // 4. Llamar la función para registrar venta a fiado
+      const resultado = await onAddVentaFiado(clienteEnBD.id, productosVenta);
+
+      console.log("✅ Venta registrada:", resultado); // Debug
+
+      // 5. Limpiar todo después de registrar exitosamente
+      setFacturaActual({
+        id: "",
+        numero: generarNumeroFactura(),
+        fecha: new Date().toISOString().split("T")[0],
+        cliente: {
+          nombre: "",
+          cuit: "",
+          direccion: "",
+          telefono: "",
+          email: "",
+        },
+        items: [],
+        subtotal: 0,
+        iva: 0,
+        total: 0,
+        observaciones: "",
+      });
+      setSearchClienteTerm("");
+
+      toast({
+        title: "✅ Venta a fiado registrada",
+        description: `$${facturaActual.total.toLocaleString()} dejada a cuenta para ${
+          clienteEnBD.nombre
+        }`,
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error("❌ Error en venta fiado:", error); // Debug
+      toast({
+        title: "❌ Error al procesar",
+        description:
+          error instanceof Error
+            ? error.message
+            : "No se pudo registrar la venta",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const [porcentajeIva, setPorcentajeIva] = useState(21);
+  const [busquedaProducto, setBusquedaProducto] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
 
   // Detectar móvil
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768)
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
-  }, [])
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // Generar número de factura automáticamente al cargar
   useEffect(() => {
     if (!facturaActual.numero) {
-      const numeroGenerado = generarNumeroFactura()
-      setFacturaActual(prev => ({
+      const numeroGenerado = generarNumeroFactura();
+      setFacturaActual((prev) => ({
         ...prev,
-        numero: numeroGenerado
-      }))
+        numero: numeroGenerado,
+      }));
     }
-  }, [facturaActual.numero])
+  }, [facturaActual.numero]);
 
   // ✅ Filtrar productos por búsqueda - CON PROTECCIÓN
-  const productosFiltrados = (products || []).filter(product =>
-    product?.name?.toLowerCase().includes(busquedaProducto.toLowerCase()) ||
-    product?.code?.toLowerCase().includes(busquedaProducto.toLowerCase()) ||
-    product?.category?.toLowerCase().includes(busquedaProducto.toLowerCase())
-  )
+  const productosFiltrados = (products || []).filter(
+    (product) =>
+      product?.name?.toLowerCase().includes(busquedaProducto.toLowerCase()) ||
+      product?.code?.toLowerCase().includes(busquedaProducto.toLowerCase()) ||
+      product?.category?.toLowerCase().includes(busquedaProducto.toLowerCase())
+  );
 
   // Generar número de factura
   const generarNumeroFactura = () => {
-    const fecha = new Date()
-    const año = fecha.getFullYear()
-    const mes = String(fecha.getMonth() + 1).padStart(2, '0')
-    const dia = String(fecha.getDate()).padStart(2, '0')
-    const hora = String(fecha.getHours()).padStart(2, '0')
-    const minuto = String(fecha.getMinutes()).padStart(2, '0')
-    const segundo = String(fecha.getSeconds()).padStart(2, '0')
-    
-    return `VENTA-${año}${mes}${dia}-${hora}${minuto}${segundo}`
-  }
+    const fecha = new Date();
+    const año = fecha.getFullYear();
+    const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+    const dia = String(fecha.getDate()).padStart(2, "0");
+    const hora = String(fecha.getHours()).padStart(2, "0");
+    const minuto = String(fecha.getMinutes()).padStart(2, "0");
+    const segundo = String(fecha.getSeconds()).padStart(2, "0");
+
+    return `VENTA-${año}${mes}${dia}-${hora}${minuto}${segundo}`;
+  };
 
   // Función para generar nuevo número
   const generarNuevoNumero = () => {
-    const numeroGenerado = generarNumeroFactura()
-    setFacturaActual(prev => ({
+    const numeroGenerado = generarNumeroFactura();
+    setFacturaActual((prev) => ({
       ...prev,
-      numero: numeroGenerado
-    }))
+      numero: numeroGenerado,
+    }));
     toast({
       title: "🔄 Número generado",
       description: `Nuevo número: ${numeroGenerado}`,
-      duration: 2000
-    })
-  }
+      duration: 2000,
+    });
+  };
 
   // Calcular totales
   useEffect(() => {
-    const subtotal = facturaActual.items.reduce((sum, item) => sum + item.subtotal, 0)
-    const iva = (subtotal * porcentajeIva) / 100
-    const total = subtotal + iva
+    const subtotal = facturaActual.items.reduce(
+      (sum, item) => sum + item.subtotal,
+      0
+    );
+    const iva = (subtotal * porcentajeIva) / 100;
+    const total = subtotal + iva;
 
-    setFacturaActual(prev => ({
+    setFacturaActual((prev) => ({
       ...prev,
       subtotal,
       iva,
-      total
-    }))
-  }, [facturaActual.items, porcentajeIva])
+      total,
+    }));
+  }, [facturaActual.items, porcentajeIva]);
 
   // Manejar cambios en campos numéricos
-  const handleNumericChange = (value: string, field: 'cantidad' | 'precioUnitario') => {
-    if (value === '') {
-      setNuevoItem(prev => ({ ...prev, [field]: '' }))
-      return
+  const handleNumericChange = (
+    value: string,
+    field: "cantidad" | "precioUnitario"
+  ) => {
+    if (value === "") {
+      setNuevoItem((prev) => ({ ...prev, [field]: "" }));
+      return;
     }
-    
-    const numValue = parseFloat(value)
+
+    const numValue = parseFloat(value);
     if (!isNaN(numValue) && numValue >= 0) {
-      setNuevoItem(prev => ({ ...prev, [field]: value }))
+      setNuevoItem((prev) => ({ ...prev, [field]: value }));
     }
-  }
+  };
 
   // Seleccionar producto del modal
   const seleccionarProducto = (product: Product) => {
-    setProductoSeleccionado(product)
+    setProductoSeleccionado(product);
     setNuevoItem({
-      cantidad: '',
-      precioUnitario: product.price.toString()
-    })
-    setMostrarSelectorProducto(false)
-    setBusquedaProducto('')
-    
+      cantidad: "",
+      precioUnitario: product.price.toString(),
+    });
+    setMostrarSelectorProducto(false);
+    setBusquedaProducto("");
+
     toast({
       title: "✅ Producto seleccionado",
       description: `${product.name} agregado para venta`,
-      duration: 2000
-    })
-  }
+      duration: 2000,
+    });
+  };
 
   // Agregar item a la factura
   const agregarItem = () => {
@@ -209,21 +391,21 @@ export default function FacturaVentaForm({
       toast({
         title: "❌ Error",
         description: "Selecciona un producto primero",
-        variant: "destructive"
-      })
-      return
+        variant: "destructive",
+      });
+      return;
     }
 
-    const cantidad = parseFloat(nuevoItem.cantidad) || 0
-    const precioUnitario = parseFloat(nuevoItem.precioUnitario) || 0
-    
+    const cantidad = parseFloat(nuevoItem.cantidad) || 0;
+    const precioUnitario = parseFloat(nuevoItem.precioUnitario) || 0;
+
     if (cantidad <= 0 || precioUnitario <= 0) {
       toast({
         title: "❌ Error",
         description: "La cantidad y el precio deben ser mayores a 0",
-        variant: "destructive"
-      })
-      return
+        variant: "destructive",
+      });
+      return;
     }
 
     // ✅ VALIDAR STOCK DISPONIBLE
@@ -231,9 +413,9 @@ export default function FacturaVentaForm({
       toast({
         title: "❌ Stock insuficiente",
         description: `Solo hay ${productoSeleccionado.quantity} unidades disponibles`,
-        variant: "destructive"
-      })
-      return
+        variant: "destructive",
+      });
+      return;
     }
 
     const item: FacturaVentaItem = {
@@ -241,93 +423,91 @@ export default function FacturaVentaForm({
       producto: productoSeleccionado,
       cantidad: cantidad,
       precioUnitario: precioUnitario,
-      subtotal: cantidad * precioUnitario
-    }
+      subtotal: cantidad * precioUnitario,
+    };
 
-    setFacturaActual(prev => ({
+    setFacturaActual((prev) => ({
       ...prev,
-      items: [...prev.items, item]
-    }))
+      items: [...prev.items, item],
+    }));
 
     // Limpiar selección
-    setProductoSeleccionado(null)
+    setProductoSeleccionado(null);
     setNuevoItem({
-      cantidad: '',
-      precioUnitario: ''
-    })
+      cantidad: "",
+      precioUnitario: "",
+    });
 
     toast({
       title: "✅ Producto agregado",
       description: `${item.producto.name} agregado a la factura de venta`,
-      duration: 2000
-    })
-  }
+      duration: 2000,
+    });
+  };
 
   // Eliminar item
   const eliminarItem = (itemId: string) => {
-    setFacturaActual(prev => ({
+    setFacturaActual((prev) => ({
       ...prev,
-      items: prev.items.filter(item => item.id !== itemId)
-    }))
-    
+      items: prev.items.filter((item) => item.id !== itemId),
+    }));
+
     toast({
       title: "🗑️ Producto eliminado",
       description: "El producto fue removido de la factura",
-      duration: 2000
-    })
-  }
+      duration: 2000,
+    });
+  };
 
   const procesarFacturaVenta = async () => {
     if (!facturaActual.cliente.nombre.trim()) {
       toast({
         title: "❌ Error",
         description: "El nombre del cliente es obligatorio",
-        variant: "destructive"
-      })
-      return
+        variant: "destructive",
+      });
+      return;
     }
-  
+
     if (facturaActual.items.length === 0) {
       toast({
-        title: "❌ Error", 
+        title: "❌ Error",
         description: "Agrega al menos un producto a la factura",
-        variant: "destructive"
-      })
-      return
+        variant: "destructive",
+      });
+      return;
     }
-  
+
     try {
       // ✅ DESCONTAR STOCK Y REGISTRAR MOVIMIENTOS DE SALIDA
       for (const item of facturaActual.items) {
         await onSaleProduct(
-          item.producto.id, 
-          item.cantidad, 
+          item.producto.id,
+          item.cantidad,
           `Venta - Factura ${facturaActual.numero}`
-        )
+        );
       }
-  
+
       const factura: FacturaVenta = {
         ...facturaActual,
-        id: facturaActual.id || Date.now().toString()
-      }
-  
-      setMostrarVistaPrevia(true)
-  
+        id: facturaActual.id || Date.now().toString(),
+      };
+
+      setMostrarVistaPrevia(true);
+
       toast({
         title: "💰 Factura de venta procesada",
         description: `Factura ${factura.numero} registrada y stock actualizado`,
-        duration: 3000
-      })
-  
+        duration: 3000,
+      });
     } catch (error) {
       toast({
         title: "❌ Error al procesar",
         description: "No se pudo procesar la venta",
-        variant: "destructive"
-      })
+        variant: "destructive",
+      });
     }
-  }
-  
+  };
 
   // Vista previa de factura de venta
   const VistaPrevia = ({ factura }: { factura: FacturaVenta }) => (
@@ -340,8 +520,12 @@ export default function FacturaVentaForm({
               <span className="text-white font-extrabold text-xl">E</span>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-blue-600">ELECTROLUXSTORE</h1>
-              <p className="text-sm text-gray-600">Sistema de Gestión de Inventarios</p>
+              <h1 className="text-2xl font-bold text-blue-600">
+                ELECTROLUXSTORE
+              </h1>
+              <p className="text-sm text-gray-600">
+                Sistema de Gestión de Inventarios
+              </p>
             </div>
           </div>
           <div className="text-sm text-gray-600">
@@ -351,10 +535,17 @@ export default function FacturaVentaForm({
           </div>
         </div>
         <div className="text-right">
-          <h2 className="text-2xl font-bold text-blue-600 mb-2">FACTURA DE VENTA</h2>
+          <h2 className="text-2xl font-bold text-blue-600 mb-2">
+            FACTURA DE VENTA
+          </h2>
           <div className="text-sm space-y-1">
-            <div><strong>Número:</strong> {factura.numero}</div>
-            <div><strong>Fecha:</strong> {new Date(factura.fecha).toLocaleDateString()}</div>
+            <div>
+              <strong>Número:</strong> {factura.numero}
+            </div>
+            <div>
+              <strong>Fecha:</strong>{" "}
+              {new Date(factura.fecha).toLocaleDateString()}
+            </div>
           </div>
         </div>
       </div>
@@ -364,13 +555,26 @@ export default function FacturaVentaForm({
         <h3 className="font-bold text-blue-600 mb-3">DATOS DEL CLIENTE</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div>
-            <p><strong>Nombre:</strong> {factura.cliente.nombre}</p>
-            <p><strong>CUIT/DNI:</strong> {factura.cliente.cuit}</p>
-            <p><strong>Dirección:</strong> {factura.cliente.direccion}</p>
+            <strong>CLIENTE CARGADO: </strong>
           </div>
           <div>
-            <p><strong>Teléfono:</strong> {factura.cliente.telefono}</p>
-            <p><strong>Email:</strong> {factura.cliente.email}</p>
+            <p>
+              <strong>Nombre:</strong> {factura.cliente.nombre}
+            </p>
+            <p>
+              <strong>CUIT/DNI:</strong> {factura.cliente.cuit}
+            </p>
+            <p>
+              <strong>Dirección:</strong> {factura.cliente.direccion}
+            </p>
+          </div>
+          <div>
+            <p>
+              <strong>Teléfono:</strong> {factura.cliente.telefono}
+            </p>
+            <p>
+              <strong>Email:</strong> {factura.cliente.email}
+            </p>
           </div>
         </div>
       </div>
@@ -380,21 +584,41 @@ export default function FacturaVentaForm({
         <table className="w-full border-collapse border border-gray-300">
           <thead>
             <tr className="bg-blue-50">
-              <th className="border border-gray-300 p-3 text-left text-blue-600">Código</th>
-              <th className="border border-gray-300 p-3 text-left text-blue-600">Producto</th>
-              <th className="border border-gray-300 p-3 text-center text-blue-600">Cantidad</th>
-              <th className="border border-gray-300 p-3 text-right text-blue-600">Precio Unit.</th>
-              <th className="border border-gray-300 p-3 text-right text-blue-600">Subtotal</th>
+              <th className="border border-gray-300 p-3 text-left text-blue-600">
+                Código
+              </th>
+              <th className="border border-gray-300 p-3 text-left text-blue-600">
+                Producto
+              </th>
+              <th className="border border-gray-300 p-3 text-center text-blue-600">
+                Cantidad
+              </th>
+              <th className="border border-gray-300 p-3 text-right text-blue-600">
+                Precio Unit.
+              </th>
+              <th className="border border-gray-300 p-3 text-right text-blue-600">
+                Subtotal
+              </th>
             </tr>
           </thead>
           <tbody>
             {factura.items.map((item) => (
               <tr key={item.id}>
-                <td className="border border-gray-300 p-3 text-sm">{item.producto.code}</td>
-                <td className="border border-gray-300 p-3">{item.producto.name}</td>
-                <td className="border border-gray-300 p-3 text-center">{item.cantidad}</td>
-                <td className="border border-gray-300 p-3 text-right">${item.precioUnitario.toLocaleString()}</td>
-                <td className="border border-gray-300 p-3 text-right font-medium">${item.subtotal.toLocaleString()}</td>
+                <td className="border border-gray-300 p-3 text-sm">
+                  {item.producto.code}
+                </td>
+                <td className="border border-gray-300 p-3">
+                  {item.producto.name}
+                </td>
+                <td className="border border-gray-300 p-3 text-center">
+                  {item.cantidad}
+                </td>
+                <td className="border border-gray-300 p-3 text-right">
+                  ${item.precioUnitario.toLocaleString()}
+                </td>
+                <td className="border border-gray-300 p-3 text-right font-medium">
+                  ${item.subtotal.toLocaleString()}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -420,24 +644,34 @@ export default function FacturaVentaForm({
         </div>
       </div>
 
-            {/* Footer */}
+      {/* Footer */}
       <div className="border-t pt-4 flex justify-between items-start">
         <div className="text-xs text-gray-500 max-w-md">
           <h4 className="font-bold mb-2 text-gray-700">TÉRMINOS DE GARANTÍA</h4>
-          <p className="mb-1">• La garantía cubre defectos de fabricación y materiales.</p>
-          <p className="mb-1">• La garantía no cubre daños causados por uso indebido, negligencia o accidentes.</p>
-          <p className="mb-1">• Para hacer efectiva la garantía, el cliente debe presentar este recibo y el producto defectuoso.</p>
-          <p>• El cliente debe devolver el producto defectuoso con su caja y accesorios en condiciones admisibles.</p>
+          <p className="mb-1">
+            • La garantía cubre defectos de fabricación y materiales.
+          </p>
+          <p className="mb-1">
+            • La garantía no cubre daños causados por uso indebido, negligencia
+            o accidentes.
+          </p>
+          <p className="mb-1">
+            • Para hacer efectiva la garantía, el cliente debe presentar este
+            recibo y el producto defectuoso.
+          </p>
+          <p>
+            • El cliente debe devolver el producto defectuoso con su caja y
+            accesorios en condiciones admisibles.
+          </p>
         </div>
         <div className="text-center text-xs text-gray-500">
           <p>ELECTROLUXSTORE - Sistema de Gestión de Inventarios</p>
           <p>Factura de venta generada electrónicamente</p>
         </div>
       </div>
-      </div>
-  )
+    </div>
+  );
 
-  // ✅ Mostrar mensaje si no hay productos
   if (!products || products.length === 0) {
     return (
       <div className="space-y-6">
@@ -446,20 +680,25 @@ export default function FacturaVentaForm({
             <Receipt className="h-6 w-6" />
             Sistema de Facturas de Venta
           </h2>
-          <p className="text-muted-foreground">Genera facturas de venta y controla el stock automáticamente</p>
+          <p className="text-muted-foreground">
+            Genera facturas de venta y controla el stock automáticamente
+          </p>
         </div>
-        
+
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Package className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No hay productos disponibles</h3>
+            <h3 className="text-lg font-semibold mb-2">
+              No hay productos disponibles
+            </h3>
             <p className="text-muted-foreground text-center">
-              Primero agrega productos a tu inventario para poder crear facturas de venta.
+              Primero agrega productos a tu inventario para poder crear facturas
+              de venta.
             </p>
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   return (
@@ -470,7 +709,9 @@ export default function FacturaVentaForm({
           <Receipt className="h-6 w-6" />
           Sistema de Facturas de Venta
         </h2>
-        <p className="text-muted-foreground">Genera facturas de venta y descuenta stock automáticamente</p>
+        <p className="text-muted-foreground">
+          Genera facturas de venta y descuenta stock automáticamente
+        </p>
       </div>
 
       {/* Información básica */}
@@ -489,7 +730,12 @@ export default function FacturaVentaForm({
                 <Input
                   id="numero"
                   value={facturaActual.numero}
-                  onChange={(e) => setFacturaActual(prev => ({ ...prev, numero: e.target.value }))}
+                  onChange={(e) =>
+                    setFacturaActual((prev) => ({
+                      ...prev,
+                      numero: e.target.value,
+                    }))
+                  }
                   placeholder="Se genera automáticamente"
                 />
                 <Button
@@ -509,12 +755,20 @@ export default function FacturaVentaForm({
                 id="fecha"
                 type="date"
                 value={facturaActual.fecha}
-                onChange={(e) => setFacturaActual(prev => ({ ...prev, fecha: e.target.value }))}
+                onChange={(e) =>
+                  setFacturaActual((prev) => ({
+                    ...prev,
+                    fecha: e.target.value,
+                  }))
+                }
               />
             </div>
             <div>
               <Label htmlFor="iva">IVA (%)</Label>
-              <Select value={porcentajeIva.toString()} onValueChange={(value) => setPorcentajeIva(Number(value))}>
+              <Select
+                value={porcentajeIva.toString()}
+                onValueChange={(value) => setPorcentajeIva(Number(value))}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -539,16 +793,103 @@ export default function FacturaVentaForm({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* ⬅️ COMBOBOX DE CLIENTES - BIEN POSICIONADO */}
+          <div>
+            <Label htmlFor="clienteSelect">Seleccionar Cliente</Label>
+
+            <div className="relative">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="clienteSelect"
+                  placeholder="Buscar cliente..."
+                  value={searchClienteTerm}
+                  onChange={(e) => setSearchClienteTerm(e.target.value)}
+                  onClick={() => setShowClienteDropdown(true)}
+                  onFocus={() => setShowClienteDropdown(true)}
+                  className="pl-10 cursor-pointer"
+                />
+              </div>
+
+              {/* Dropdown - aparece DEBAJO */}
+              {showClienteDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white border rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
+                  {filteredClientes.length > 0 ? (
+                    filteredClientes.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => {
+                          setFacturaActual((prev) => ({
+                            ...prev,
+                            cliente: {
+                              nombre: c.nombre,
+                              cuit: c.cuit || "",
+                              direccion: c.direccion || "",
+                              telefono: c.telefono || "",
+                              email: c.email || "",
+                            },
+                          }));
+                          setShowClienteDropdown(false);
+                          setSearchClienteTerm("");
+                        }}
+                        className="w-full p-3 text-left hover:bg-blue-50 border-b last:border-b-0 transition-colors flex justify-between items-start"
+                      >
+                        <div>
+                          <p className="font-semibold text-sm">{c.nombre}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {c.cuit}
+                          </p>
+                        </div>
+                        {c.saldoPendiente > 0 && (
+                          <Badge variant="destructive" className="text-xs">
+                            ${c.saldoPendiente.toLocaleString()}
+                          </Badge>
+                        )}
+                      </button>
+                    ))
+                  ) : searchClienteTerm ? (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      No se encontraron clientes
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      Escribe para buscar...
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ⬅️ Cerrar dropdown al clickear afuera */}
+          {showClienteDropdown && (
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setShowClienteDropdown(false)}
+            />
+          )}
+
+          {/* ⬅️ Cerrar dropdown al clickear afuera */}
+          {showClienteDropdown && (
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setShowClienteDropdown(false)}
+            />
+          )}
+
+          {/* Campos de la factura */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="clienteNombre">Nombre / Razón Social *</Label>
               <Input
                 id="clienteNombre"
                 value={facturaActual.cliente.nombre}
-                onChange={(e) => setFacturaActual(prev => ({
-                  ...prev,
-                  cliente: { ...prev.cliente, nombre: e.target.value }
-                }))}
+                onChange={(e) =>
+                  setFacturaActual((prev) => ({
+                    ...prev,
+                    cliente: { ...prev.cliente, nombre: e.target.value },
+                  }))
+                }
                 placeholder="Nombre del cliente"
               />
             </div>
@@ -557,10 +898,12 @@ export default function FacturaVentaForm({
               <Input
                 id="clienteCuit"
                 value={facturaActual.cliente.cuit}
-                onChange={(e) => setFacturaActual(prev => ({
-                  ...prev,
-                  cliente: { ...prev.cliente, cuit: e.target.value }
-                }))}
+                onChange={(e) =>
+                  setFacturaActual((prev) => ({
+                    ...prev,
+                    cliente: { ...prev.cliente, cuit: e.target.value },
+                  }))
+                }
                 placeholder="CUIT del cliente"
               />
             </div>
@@ -569,10 +912,12 @@ export default function FacturaVentaForm({
               <Input
                 id="clienteDireccion"
                 value={facturaActual.cliente.direccion}
-                onChange={(e) => setFacturaActual(prev => ({
-                  ...prev,
-                  cliente: { ...prev.cliente, direccion: e.target.value }
-                }))}
+                onChange={(e) =>
+                  setFacturaActual((prev) => ({
+                    ...prev,
+                    cliente: { ...prev.cliente, direccion: e.target.value },
+                  }))
+                }
                 placeholder="Dirección del cliente"
               />
             </div>
@@ -581,10 +926,12 @@ export default function FacturaVentaForm({
               <Input
                 id="clienteTelefono"
                 value={facturaActual.cliente.telefono}
-                onChange={(e) => setFacturaActual(prev => ({
-                  ...prev,
-                  cliente: { ...prev.cliente, telefono: e.target.value }
-                }))}
+                onChange={(e) =>
+                  setFacturaActual((prev) => ({
+                    ...prev,
+                    cliente: { ...prev.cliente, telefono: e.target.value },
+                  }))
+                }
                 placeholder="Teléfono del cliente"
               />
             </div>
@@ -594,10 +941,12 @@ export default function FacturaVentaForm({
                 id="clienteEmail"
                 type="email"
                 value={facturaActual.cliente.email}
-                onChange={(e) => setFacturaActual(prev => ({
-                  ...prev,
-                  cliente: { ...prev.cliente, email: e.target.value }
-                }))}
+                onChange={(e) =>
+                  setFacturaActual((prev) => ({
+                    ...prev,
+                    cliente: { ...prev.cliente, email: e.target.value },
+                  }))
+                }
                 placeholder="email@cliente.com"
               />
             </div>
@@ -619,11 +968,18 @@ export default function FacturaVentaForm({
             <div className="p-4 border rounded-lg bg-blue-50">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h4 className="font-medium text-blue-700">{productoSeleccionado.name}</h4>
-                  <p className="text-sm text-blue-600">Código: {productoSeleccionado.code}</p>
-                  <Badge variant="outline" className="mt-1">{productoSeleccionado.category}</Badge>
+                  <h4 className="font-medium text-blue-700">
+                    {productoSeleccionado.name}
+                  </h4>
+                  <p className="text-sm text-blue-600">
+                    Código: {productoSeleccionado.code}
+                  </p>
+                  <Badge variant="outline" className="mt-1">
+                    {productoSeleccionado.category}
+                  </Badge>
                   <p className="text-sm text-blue-600 mt-1">
-                    <strong>Stock disponible:</strong> {productoSeleccionado.quantity} unidades
+                    <strong>Stock disponible:</strong>{" "}
+                    {productoSeleccionado.quantity} unidades
                   </p>
                 </div>
                 <Button
@@ -631,10 +987,10 @@ export default function FacturaVentaForm({
                   size="sm"
                   onClick={() => setProductoSeleccionado(null)}
                 >
-                  Cambiar
+                  X
                 </Button>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="cantidad">Cantidad a Vender *</Label>
@@ -643,7 +999,9 @@ export default function FacturaVentaForm({
                     type="text"
                     inputMode="decimal"
                     value={nuevoItem.cantidad}
-                    onChange={(e) => handleNumericChange(e.target.value, 'cantidad')}
+                    onChange={(e) =>
+                      handleNumericChange(e.target.value, "cantidad")
+                    }
                     placeholder="0"
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -657,12 +1015,14 @@ export default function FacturaVentaForm({
                     type="text"
                     inputMode="decimal"
                     value={nuevoItem.precioUnitario}
-                    onChange={(e) => handleNumericChange(e.target.value, 'precioUnitario')}
+                    onChange={(e) =>
+                      handleNumericChange(e.target.value, "precioUnitario")
+                    }
                     placeholder="0.00"
                   />
                 </div>
                 <div className="flex items-end">
-                  <Button 
+                  <Button
                     onClick={agregarItem}
                     className="w-full bg-blue-600 hover:bg-blue-700"
                   >
@@ -671,21 +1031,30 @@ export default function FacturaVentaForm({
                   </Button>
                 </div>
               </div>
-              
+
               {/* Mostrar subtotal del producto actual */}
               {nuevoItem.cantidad && nuevoItem.precioUnitario && (
                 <div className="mt-4 p-3 bg-white rounded border">
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Subtotal:</span>
                     <span className="font-medium text-blue-600">
-                      ${((parseFloat(nuevoItem.cantidad) || 0) * (parseFloat(nuevoItem.precioUnitario) || 0)).toLocaleString()}
+                      $
+                      {(
+                        (parseFloat(nuevoItem.cantidad) || 0) *
+                        (parseFloat(nuevoItem.precioUnitario) || 0)
+                      ).toLocaleString()}
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-xs text-gray-500 mt-1">
                     <span>Stock después de venta:</span>
-                    <span>{productoSeleccionado.quantity - (parseFloat(nuevoItem.cantidad) || 0)} unidades</span>
+                    <span>
+                      {productoSeleccionado.quantity -
+                        (parseFloat(nuevoItem.cantidad) || 0)}{" "}
+                      unidades
+                    </span>
                   </div>
-                  {(parseFloat(nuevoItem.cantidad) || 0) > productoSeleccionado.quantity && (
+                  {(parseFloat(nuevoItem.cantidad) || 0) >
+                    productoSeleccionado.quantity && (
                     <div className="mt-2 p-2 bg-red-50 rounded text-xs">
                       <div className="flex items-center gap-1 text-red-700">
                         <Minus className="h-3 w-3" />
@@ -699,7 +1068,9 @@ export default function FacturaVentaForm({
           ) : (
             <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
               <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 mb-4">Selecciona un producto de tu inventario</p>
+              <p className="text-gray-500 mb-4">
+                Selecciona un producto de tu inventario
+              </p>
               <Button
                 onClick={() => setMostrarSelectorProducto(true)}
                 variant="outline"
@@ -727,14 +1098,20 @@ export default function FacturaVentaForm({
               {/* Lista de items */}
               <div className="space-y-2">
                 {facturaActual.items.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between p-3 border rounded-lg bg-gray-50"
+                  >
                     <div className="flex-1">
                       <div className="font-medium">{item.producto.name}</div>
                       <div className="text-sm text-muted-foreground">
-                        Código: {item.producto.code} | Cantidad: {item.cantidad} | Precio: ${item.precioUnitario.toLocaleString()}
+                        Código: {item.producto.code} | Cantidad: {item.cantidad}{" "}
+                        | Precio: ${item.precioUnitario.toLocaleString()}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="outline" className="text-xs">{item.producto.category}</Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {item.producto.category}
+                        </Badge>
                         <Badge variant="secondary" className="text-xs">
                           <TrendingDown className="h-3 w-3 mr-1" />
                           Stock: -{item.cantidad}
@@ -742,7 +1119,9 @@ export default function FacturaVentaForm({
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="font-bold text-blue-600">${item.subtotal.toLocaleString()}</span>
+                      <span className="font-bold text-blue-600">
+                        ${item.subtotal.toLocaleString()}
+                      </span>
                       <Button
                         variant="outline"
                         size="sm"
@@ -781,26 +1160,48 @@ export default function FacturaVentaForm({
         </Card>
       )}
 
-      {/* Botón para procesar */}
-      <div className="flex justify-center">
+      {/* Botones de acción */}
+      <div className="flex justify-center gap-3">
         <Button
           onClick={procesarFacturaVenta}
-          disabled={facturaActual.items.length === 0 || !facturaActual.cliente.nombre.trim()}
+          disabled={
+            facturaActual.items.length === 0 ||
+            !facturaActual.cliente.nombre.trim()
+          }
           className="bg-blue-600 hover:bg-blue-700 px-8 py-3"
           size="lg"
         >
           <DollarSign className="h-5 w-5 mr-2" />
           Procesar Factura de Venta
         </Button>
+
+        <Button
+          onClick={handleDejarAFiado}
+          disabled={
+            facturaActual.items.length === 0 ||
+            !facturaActual.cliente.nombre.trim() ||
+            isLoading
+          }
+          className="bg-amber-600 hover:bg-amber-700 px-8 py-3"
+          size="lg"
+        >
+          <DollarSign className="h-5 w-5 mr-2" />
+          Dejar a Fiado / Cuenta Corriente
+        </Button>
       </div>
 
       {/* Modal selector de productos */}
-      <Dialog open={mostrarSelectorProducto} onOpenChange={setMostrarSelectorProducto}>
+      <Dialog
+        open={mostrarSelectorProducto}
+        onOpenChange={setMostrarSelectorProducto}
+      >
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-blue-600">Seleccionar Producto del Inventario</DialogTitle>
+            <DialogTitle className="text-blue-600">
+              Seleccionar Producto del Inventario
+            </DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-4">
             {/* Búsqueda */}
             <div className="relative">
@@ -813,43 +1214,92 @@ export default function FacturaVentaForm({
               />
             </div>
 
+            {/* Lector de barras */}
+            <div className="p-4 border-2 border-blue-400 rounded-lg bg-blue-50">
+              <div className="flex items-center gap-2 mb-2">
+                <BarChart3 className="h-5 w-5 text-blue-600" />
+                <label className="text-sm font-semibold text-blue-700">
+                  O escanea código de barras:
+                </label>
+              </div>
+              <Input
+                autoFocus
+                placeholder="Escanea aquí..."
+                onChange={(e) => {
+                  const barcode = e.target.value.trim();
+                  if (barcode.length >= 5) {
+                    const productoEncontrado = products.find(
+                      (p) => p.barcode === barcode
+                    );
+                    if (productoEncontrado && productoEncontrado.quantity > 0) {
+                      agregarProductoDelModal(productoEncontrado);
+                      e.target.value = "";
+                    } else {
+                      toast({
+                        title: "❌ No encontrado",
+                        description: "Producto sin stock o código inválido",
+                        variant: "destructive",
+                        duration: 1000,
+                      });
+                      e.target.value = "";
+                    }
+                  }
+                }}
+                className="bg-white border-blue-300 focus:border-blue-500"
+              />
+            </div>
+
             {/* Lista de productos */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
               {productosFiltrados.map((product) => (
                 <div
                   key={product.id}
                   className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                    product.quantity > 0 
-                      ? 'hover:bg-gray-50 border-gray-200' 
-                      : 'bg-gray-100 border-gray-300 cursor-not-allowed opacity-60'
+                    product.quantity > 0
+                      ? "hover:bg-gray-50 border-gray-200"
+                      : "bg-gray-100 border-gray-300 cursor-not-allowed opacity-60"
                   }`}
-                  onClick={() => product.quantity > 0 && seleccionarProducto(product)}
+                  onClick={() =>
+                    product.quantity > 0 && agregarProductoDelModal(product)
+                  }
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex-1">
                       <h4 className="font-medium">{product.name}</h4>
-                      <p className="text-sm text-gray-500">Código: {product.code}</p>
+                      <p className="text-sm text-gray-500">
+                        Código: {product.code}
+                      </p>
                     </div>
-                    <Badge variant="outline" className="text-xs">{product.category}</Badge>
+                    <Badge variant="outline" className="text-xs">
+                      {product.category}
+                    </Badge>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-gray-500">Precio:</span>
-                      <p className="font-medium">${product.price.toLocaleString()}</p>
+                      <p className="font-medium">
+                        ${product.price.toLocaleString()}
+                      </p>
                     </div>
                     <div>
                       <span className="text-gray-500">Stock:</span>
-                      <p className={`font-medium ${
-                        product.quantity > 0 ? 'text-green-600' : 'text-red-600'
-                      }`}>
+                      <p
+                        className={`font-medium ${
+                          product.quantity > 0
+                            ? "text-green-600"
+                            : "text-red-600"
+                        }`}
+                      >
                         {product.quantity} unidades
                       </p>
                     </div>
                   </div>
-                  
+
                   {product.description && (
-                    <p className="text-xs text-gray-400 mt-2 line-clamp-2">{product.description}</p>
+                    <p className="text-xs text-gray-400 mt-2 line-clamp-2">
+                      {product.description}
+                    </p>
                   )}
 
                   {product.quantity === 0 && (
@@ -873,51 +1323,68 @@ export default function FacturaVentaForm({
 
       {/* Modal de vista previa */}
       <Dialog open={mostrarVistaPrevia} onOpenChange={setMostrarVistaPrevia}>
-  <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-    <DialogHeader>
-      <DialogTitle className="flex items-center justify-between">
-        <span className="text-blue-600">Factura de Venta Procesada</span>
-        <div className="flex gap-2">
-          {/* Botón de descarga PDF */}
-          <PDFDownloadLink
-            document={<FacturaVentaPDF factura={facturaActual} porcentajeIva={porcentajeIva} />}
-            fileName={`factura-venta-${facturaActual.numero}.pdf`}
-          >
-            {({ loading }: { loading: boolean }) => (
-              <Button 
-                variant="outline" 
-                size="sm"
-                disabled={loading}
-                className="flex items-center gap-2"
-              >
-                <Download className="h-4 w-4" />
-                {loading ? 'Generando...' : 'Descargar PDF'}
-              </Button>
-            )}
-          </PDFDownloadLink>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span className="text-blue-600">Factura de Venta Procesada</span>
+              <div className="flex gap-2">
+                {/* Botón de descarga PDF */}
+                <PDFDownloadLink
+                  document={
+                    <FacturaVentaPDF
+                      factura={facturaActual}
+                      porcentajeIva={porcentajeIva}
+                    />
+                  }
+                  fileName={`factura-venta-${facturaActual.numero}.pdf`}
+                >
+                  {({ loading }: { loading: boolean }) => (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={loading}
+                      className="flex items-center gap-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      {loading ? "Generando..." : "Descargar PDF"}
+                    </Button>
+                  )}
+                </PDFDownloadLink>
 
-          {/* Botón de impresión */}
-          <BlobProvider document={<FacturaVentaPDF factura={facturaActual} porcentajeIva={porcentajeIva} />}>
-            {({ url, loading }: { url: string | null; loading: boolean }) => (
-              <Button 
-                variant="outline" 
-                size="sm"
-                disabled={loading || !url}
-                onClick={() => url && window.open(url, '_blank')}
-                className="flex items-center gap-2"
-              >
-                <Printer className="h-4 w-4" />
-                {loading ? 'Generando...' : 'Imprimir'}
-              </Button>
-            )}
-          </BlobProvider>
-        </div>
-      </DialogTitle>
-    </DialogHeader>
-    <VistaPrevia factura={facturaActual} />
-  </DialogContent>
-</Dialog>
-
+                {/* Botón de impresión */}
+                <BlobProvider
+                  document={
+                    <FacturaVentaPDF
+                      factura={facturaActual}
+                      porcentajeIva={porcentajeIva}
+                    />
+                  }
+                >
+                  {({
+                    url,
+                    loading,
+                  }: {
+                    url: string | null;
+                    loading: boolean;
+                  }) => (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={loading || !url}
+                      onClick={() => url && window.open(url, "_blank")}
+                      className="flex items-center gap-2"
+                    >
+                      <Printer className="h-4 w-4" />
+                      {loading ? "Generando..." : "Imprimir"}
+                    </Button>
+                  )}
+                </BlobProvider>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          <VistaPrevia factura={facturaActual} />
+        </DialogContent>
+      </Dialog>
     </div>
-  )
+  );
 }

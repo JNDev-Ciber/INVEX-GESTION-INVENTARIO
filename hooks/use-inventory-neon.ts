@@ -1023,6 +1023,69 @@ export function useInventoryNeon() {
     return ventasFiado.filter((v) => v.clienteId === clienteId);
   };
 
+  // ⬅️ ELIMINAR CLIENTE (FUNCIÓN CORREGIDA)
+  const deleteCliente = async (clienteId: number): Promise<boolean> => {
+    try {
+      setError(null);
+      
+      if (connectionStatus === "offline") {
+        throw new Error("No hay conexión a la base de datos.");
+      }
+  
+      console.log("🗑️ Eliminando cliente y sus ventas asociadas...");
+  
+      // 1. Obtener todas las ventas del cliente
+      const ventas = await sql`
+        SELECT id FROM ventas_fiado WHERE cliente_id = ${clienteId}
+      `;
+  
+      if (ventas.length > 0) {
+        const ventaIds = ventas.map((v: any) => v.id);
+        
+        // 2. Eliminar detalles de ventas (uno por uno para evitar problemas con ANY)
+        for (const ventaId of ventaIds) {
+          await sql`
+            DELETE FROM ventas_fiado_detalle 
+            WHERE venta_fiado_id = ${ventaId}
+          `;
+        }
+        console.log(`✅ Eliminados detalles de ${ventaIds.length} ventas`);
+  
+        // 3. Eliminar pagos asociados
+        await sql`
+          DELETE FROM pagos 
+          WHERE cliente_id = ${clienteId}
+        `;
+        console.log("✅ Eliminados pagos del cliente");
+  
+        // 4. Eliminar las ventas (una por una)
+        for (const ventaId of ventaIds) {
+          await sql`
+            DELETE FROM ventas_fiado 
+            WHERE id = ${ventaId}
+          `;
+        }
+        console.log(`✅ Eliminadas ${ventaIds.length} ventas`);
+      }
+  
+      // 5. Eliminar el cliente
+      await sql`
+        DELETE FROM clientes_ventas 
+        WHERE id = ${clienteId}
+      `;
+      console.log("✅ Cliente eliminado exitosamente");
+  
+      await loadAllData();
+      return true;
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Error al eliminar cliente";
+      console.error("❌ Error eliminando cliente:", errorMessage);
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  };
+
   return {
     // Productos y movimientos
     products,
@@ -1056,7 +1119,7 @@ export function useInventoryNeon() {
     addVentaFiado,
     marcarProductosPagados,
     getVentasByCliente,
-    // Funciones generales
+    deleteCliente, 
     refreshData: loadAllData,
     retryConnection: initializeConnection,
   };

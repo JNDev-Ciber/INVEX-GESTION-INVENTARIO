@@ -550,6 +550,10 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
           </div>
         );
         case "clientes":
+        function deleteCliente(clienteId: number): Promise<boolean> {
+          throw new Error("Function not implemented.");
+        }
+
           return (
             <ClientesVentasManager
               clientes={clientesVentas}
@@ -558,6 +562,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
               onAddCliente={addCliente}
               onAddVentaFiado={addVentaFiado}
               onMarcarPagados={marcarProductosPagados}
+              onDeleteCliente={deleteCliente}
             />
           );
         
@@ -692,6 +697,8 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
         return (
           <FacturaVentaForm
             products={products}
+            clientes={clientesVentas}
+            onAddVentaFiado={addVentaFiado}
             onSaleProduct={async (
               productId: string,
               quantity: number,
