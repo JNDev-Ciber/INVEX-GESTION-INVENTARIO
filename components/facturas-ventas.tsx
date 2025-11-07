@@ -256,7 +256,7 @@ export default function FacturaVentaForm({
       setSearchClienteTerm("");
 
       toast({
-        title: "✅ Venta a fiado registrada",
+        title: "✅ Venta a cuenta corriente registrada",
         description: `$${facturaActual.total.toLocaleString()} dejada a cuenta para ${
           clienteEnBD.nombre
         }`,
@@ -656,11 +656,11 @@ export default function FacturaVentaForm({
             o accidentes.
           </p>
           <p className="mb-1">
-            • Para hacer efectiva la garantía, el cliente debe presentar este
+            • Para hacer efectiva la garantía, el cliente saldo presentar este
             recibo y el producto defectuoso.
           </p>
           <p>
-            • El cliente debe devolver el producto defectuoso con su caja y
+            • El cliente saldo devolver el producto defectuoso con su caja y
             accesorios en condiciones admisibles.
           </p>
         </div>
@@ -1186,7 +1186,7 @@ export default function FacturaVentaForm({
           size="lg"
         >
           <DollarSign className="h-5 w-5 mr-2" />
-          Dejar a Fiado / Cuenta Corriente
+          Dejar a Cuenta Corriente
         </Button>
       </div>
 

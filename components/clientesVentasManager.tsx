@@ -52,7 +52,7 @@ export function ClientesVentasManager({
 }: ClientesVentasManagerProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [productSearchTerm, setProductSearchTerm] = useState("");
-  const [filterDeuda, setFilterDeuda] = useState<"todos" | "debe" | "pagado">(
+  const [filterDeuda, setFilterDeuda] = useState<"todos" | "saldo" | "pagado">(
     "todos"
   );
   const [selectedCliente, setSelectedCliente] = useState<ClienteVenta | null>(
@@ -87,7 +87,7 @@ export function ClientesVentasManager({
           c.cuit?.includes(searchTerm)
       )
       .filter((c) => {
-        if (filterDeuda === "debe") return c.saldoPendiente > 0;
+        if (filterDeuda === "saldo") return c.saldoPendiente > 0;
         if (filterDeuda === "pagado") return c.saldoPendiente === 0;
         return true;
       });
@@ -321,7 +321,7 @@ export function ClientesVentasManager({
               <Alert className="bg-red-50 border-red-300">
                 <DollarSign className="h-5 w-5 text-red-600" />
                 <AlertDescription className="text-red-700">
-                  <div className="text-xs font-medium">DEBE</div>
+                  <div className="text-xs font-medium">SALDO</div>
                   <div className="text-2xl font-bold">
                     ${selectedCliente.saldoPendiente.toLocaleString()}
                   </div>
@@ -773,7 +773,7 @@ export function ClientesVentasManager({
       </div>
 
       <div className="flex gap-2">
-        {(["todos", "debe", "pagado"] as const).map((f) => (
+        {(["todos", "saldo", "pagado"] as const).map((f) => (
           <Button
             key={f}
             variant={filterDeuda === f ? "default" : "outline"}
@@ -781,7 +781,7 @@ export function ClientesVentasManager({
             onClick={() => setFilterDeuda(f)}
           >
             {f === "todos" && `Todos (${clientes.length})`}
-            {f === "debe" &&
+            {f === "saldo" &&
               `Deben (${clientes.filter((c) => c.saldoPendiente > 0).length})`}
             {f === "pagado" &&
               `Al día (${

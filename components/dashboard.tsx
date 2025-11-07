@@ -314,7 +314,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
       }
 
       if (quantity <= 0) {
-        setMovementError("La cantidad debe ser mayor a 0");
+        setMovementError("La cantidad saldo ser mayor a 0");
         return;
       }
 

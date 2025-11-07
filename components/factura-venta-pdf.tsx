@@ -336,10 +336,10 @@ const FacturaVentaPDF: React.FC<FacturaVentaPDFProps> = ({ factura, porcentajeIv
             • La garantía no cubre daños causados por uso indebido, negligencia o accidentes.
           </Text>
           <Text style={styles.garantiaTexto}>
-            • Para hacer efectiva la garantía, el cliente debe presentar este recibo y el producto defectuoso.
+            • Para hacer efectiva la garantía, el cliente saldo presentar este recibo y el producto defectuoso.
           </Text>
           <Text style={styles.garantiaTexto}>
-            • El cliente debe devolver el producto defectuoso con su caja y accesorios en condiciones admisibles.
+            • El cliente saldo devolver el producto defectuoso con su caja y accesorios en condiciones admisibles.
           </Text>
         </View>
         <View style={styles.footerRight}>
