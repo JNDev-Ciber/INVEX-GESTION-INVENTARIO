@@ -277,7 +277,7 @@ export default function FacturaVentaForm({
     }
   };
 
-  const [porcentajeIva, setPorcentajeIva] = useState(21);
+  const [porcentajeIva, setPorcentajeIva] = useState(0);
   const [busquedaProducto, setBusquedaProducto] = useState("");
   const [isMobile, setIsMobile] = useState(false);
 
@@ -531,7 +531,7 @@ export default function FacturaVentaForm({
           <div className="text-sm text-gray-600">
             <p>Dirección: Calle Hector Varas 670</p>
             <p>Teléfono: +54 9 3573 41-4552</p>
-            <p>Email: emi-carrerra16@hotmail.com</p>
+            <p>Email: electrolux.vdr@gmail.com</p>
           </div>
         </div>
         <div className="text-right">

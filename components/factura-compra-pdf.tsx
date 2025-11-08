@@ -280,7 +280,7 @@ export const FacturaCompraPDF: React.FC<FacturaCompraPDFProps> = ({ factura, por
             <View style={styles.companyDetails}>
               <Text>Dirección: Calle Hector Varas 670</Text>
               <Text>Teléfono: +54 9 3573 41-4552</Text>
-              <Text>Email: emi-carrerra16@hotmail.com</Text>
+              <Text>Email: electrolux.vdr@gmail.com</Text>
             </View>
           </View>
         </View>
