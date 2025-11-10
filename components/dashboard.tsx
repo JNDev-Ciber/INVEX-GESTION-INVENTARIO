@@ -120,9 +120,11 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
     retryConnection,
     clientesVentas,
     ventasFiado,
+    pagos,
     addVentaFiado,
     addCliente,
     marcarProductosPagados,
+    registrarPagoParcial,
   } = useInventoryNeon();
 
   // Estados existentes
@@ -213,6 +215,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
       duration: 5000,
     });
   };
+
 
   const handleAddProduct = async (
     productData: Omit<Product, "id" | "createdAt" | "updatedAt">
@@ -559,10 +562,11 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
               clientes={clientesVentas}
               ventasFiado={ventasFiado}
               products={products}
-              onAddCliente={addCliente}
+              pagos={pagos}  
               onAddVentaFiado={addVentaFiado}
               onMarcarPagados={marcarProductosPagados}
               onDeleteCliente={deleteCliente}
+              onRegistrarPagoParcial={registrarPagoParcial}
             />
           );
         

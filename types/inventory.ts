@@ -18,13 +18,14 @@ export interface Product {
 
 export interface Movement {
   id: string
-  productId: string
+  productId: string | null; 
   type: "entrada" | "salida"
   quantity: number
   reason: string
   date: string
   previousQuantity: number
   newQuantity: number
+  valor_total?: number;
 }
 
 export interface VentaFiadoDetalle {
@@ -37,6 +38,13 @@ export interface VentaFiadoDetalle {
   subtotal: number;
   pagado: boolean;
   pagadoEn?: string;
+}
+export interface Pago {
+  id: number;
+  cliente_id: number;
+  venta_fiado_id: number | null;
+  monto: number;
+  fecha: string;
 }
 
 export interface VentaFiado {

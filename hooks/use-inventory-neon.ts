@@ -10,6 +10,7 @@ import type {
   ClienteVenta,
   VentaFiado,
   VentaFiadoDetalle,
+  Pago,
 } from "../types/inventory";
 
 export function useInventoryNeon() {
@@ -18,13 +19,13 @@ export function useInventoryNeon() {
   const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([]);
   const [clientesVentas, setClientesVentas] = useState<ClienteVenta[]>([]);
   const [ventasFiado, setVentasFiado] = useState<VentaFiado[]>([]);
+  const [pagos, setPagos] = useState<Pago[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<
     "connecting" | "connected" | "error" | "offline"
   >("connecting");
 
-  // Cargar datos iniciales
   useEffect(() => {
     initializeConnection();
   }, []);
@@ -37,7 +38,6 @@ export function useInventoryNeon() {
 
       console.log("🚀 Iniciando conexión a Neon...");
 
-      // Verificar configuración primero
       const config = checkConfiguration();
       if (!config.hasUrl) {
         throw new Error(
@@ -49,14 +49,12 @@ export function useInventoryNeon() {
         throw new Error("URL de Neon inválida. Debe ser una URL de neon.tech");
       }
 
-      // Probar conexión
       const connectionTest = await testConnection();
       console.log("📊 Resultado de conexión:", connectionTest);
 
       if (!connectionTest.success) {
         setConnectionStatus("error");
 
-        // Proporcionar mensajes de error más específicos
         let userFriendlyMessage = connectionTest.message;
 
         switch (connectionTest.errorType) {
@@ -84,7 +82,6 @@ export function useInventoryNeon() {
       setConnectionStatus("connected");
       console.log("✅ Conexión establecida, cargando datos...");
 
-      // Si la conexión es exitosa, cargar datos
       await loadAllData();
     } catch (err) {
       console.error("❌ Error en inicialización:", err);
@@ -95,7 +92,6 @@ export function useInventoryNeon() {
           : "Error al conectar con la base de datos"
       );
 
-      // Fallback a modo offline con datos de ejemplo
       console.log("📱 Activando modo offline con datos de ejemplo...");
       loadSampleData();
     } finally {
@@ -162,6 +158,7 @@ export function useInventoryNeon() {
     setPriceHistory([]);
     setClientesVentas([]);
     setVentasFiado([]);
+    setPagos([]);
     setConnectionStatus("offline");
   };
 
@@ -170,7 +167,6 @@ export function useInventoryNeon() {
       setError(null);
       console.log("📊 Cargando datos desde Neon...");
 
-      // ✅ AGREGADO: p.codigo_barras en el SELECT
       const productosData = await sql`
         SELECT 
           p.id,
@@ -195,15 +191,23 @@ export function useInventoryNeon() {
 
       console.log("✅ Productos cargados:", productosData?.length || 0);
 
-      // Cargar movimientos
       const movimientosData = await sql`
-        SELECT * FROM movimientos 
+        SELECT 
+          id,
+          producto_id,
+          fecha,
+          tipo,
+          cantidad,
+          motivo,
+          stock_antes,
+          stock_despues,
+          valor_total
+        FROM movimientos 
         ORDER BY fecha DESC
       `;
 
       console.log("✅ Movimientos cargados:", movimientosData?.length || 0);
 
-      // Cargar clientes ventas
       const clientesData = await sql`
         SELECT * FROM clientes_ventas 
         ORDER BY nombre ASC
@@ -211,7 +215,6 @@ export function useInventoryNeon() {
 
       console.log("✅ Clientes cargados:", clientesData?.length || 0);
 
-      // Cargar ventas fiado con detalles
       const ventasData = await sql`
         SELECT 
           vf.id,
@@ -241,7 +244,12 @@ export function useInventoryNeon() {
 
       console.log("✅ Ventas a crédito cargadas:", ventasData?.length || 0);
 
-      // ✅ AGREGADO: barcode en el mapeo
+      const pagosData = await sql`
+        SELECT * FROM pagos ORDER BY fecha DESC
+      `;
+
+      console.log("✅ Pagos cargados:", pagosData?.length || 0);
+
       const mappedProducts: Product[] = (productosData || []).map(
         (item: any) => ({
           id: item.id,
@@ -261,7 +269,6 @@ export function useInventoryNeon() {
         })
       );
 
-      // Mapear movimientos al formato esperado
       const mappedMovements: Movement[] = (movimientosData || []).map(
         (item: any) => ({
           id: item.id,
@@ -272,10 +279,10 @@ export function useInventoryNeon() {
           date: item.fecha,
           previousQuantity: item.stock_antes,
           newQuantity: item.stock_despues,
+          valor_total: item.valor_total,
         })
       );
 
-      // Mapear clientes
       const mappedClientes: ClienteVenta[] = (clientesData || []).map(
         (c: any) => ({
           id: c.id,
@@ -288,7 +295,6 @@ export function useInventoryNeon() {
         })
       );
 
-      // Mapear ventas a crédito
       const mappedVentas: VentaFiado[] = (ventasData || []).map((v: any) => ({
         id: v.id,
         clienteId: v.cliente_id,
@@ -316,6 +322,7 @@ export function useInventoryNeon() {
       setPriceHistory([]);
       setClientesVentas(mappedClientes);
       setVentasFiado(mappedVentas);
+      setPagos(pagosData as any[]);
 
       console.log("🎉 Todos los datos cargados exitosamente");
     } catch (err) {
@@ -325,7 +332,6 @@ export function useInventoryNeon() {
     }
   };
 
-  // Agregar producto
   const addProduct = async (
     productData: Omit<Product, "id" | "createdAt" | "updatedAt"> & {
       subcategory?: string;
@@ -341,7 +347,6 @@ export function useInventoryNeon() {
         );
       }
 
-      // Obtener o crear la categoría
       let categoriaId;
       const categoriaResult = await sql`
         SELECT id FROM categorias 
@@ -359,7 +364,6 @@ export function useInventoryNeon() {
         categoriaId = categoriaResult[0].id;
       }
 
-      // Obtener o crear la subcategoría si corresponde
       let subcategoriaId = null;
       if (productData.subcategory) {
         const subcatResult = await sql`
@@ -407,7 +411,6 @@ export function useInventoryNeon() {
     }
   };
 
-  // AGREGAR CLIENTE
   const addCliente = async (nombre: string, cuit: string, telefono: string) => {
     try {
       setError(null);
@@ -429,7 +432,6 @@ export function useInventoryNeon() {
     }
   };
 
-  // Actualizar producto
   const updateProduct = async (id: string, updates: any) => {
     try {
       setError(null);
@@ -440,7 +442,6 @@ export function useInventoryNeon() {
         );
       }
 
-      // Obtener o crear categoría si corresponde
       let categoria_id;
       if (updates.category) {
         const categoriaResult = await sql`
@@ -460,7 +461,6 @@ export function useInventoryNeon() {
         }
       }
 
-      // Obtener o crear subcategoría si corresponde
       let subcategoria_id;
       if (updates.subcategory) {
         const subcatResult = await sql`
@@ -482,7 +482,6 @@ export function useInventoryNeon() {
         }
       }
 
-      // Construir SET como array de strings
       const updateFields = [];
       if (updates.code) updateFields.push(`codigo = '${updates.code}'`);
       if (updates.name) updateFields.push(`nombre = '${updates.name}'`);
@@ -537,6 +536,112 @@ export function useInventoryNeon() {
     }
   };
 
+  const registrarPagoParcial = async (
+    clienteId: number,
+    monto: number
+  ): Promise<boolean> => {
+    try {
+      setError(null);
+
+      if (connectionStatus === "offline") {
+        throw new Error("No hay conexión a la base de datos.");
+      }
+
+      if (monto <= 0) {
+        throw new Error("El monto debe ser mayor a 0");
+      }
+
+      const cliente = await sql`
+        SELECT saldo_pendiente, nombre FROM clientes_ventas WHERE id = ${clienteId}
+      `;
+
+      if (cliente.length === 0) {
+        throw new Error("Cliente no encontrado");
+      }
+
+      if (monto > parseFloat(cliente[0].saldo_pendiente)) {
+        throw new Error("El monto supera la deuda total");
+      }
+
+      const clienteNombre = cliente[0].nombre;
+      const today = new Date().toISOString().split("T")[0];
+
+      console.log(
+        `💰 Registrando pago parcial de $${monto} para ${clienteNombre}`
+      );
+
+      await sql`
+        UPDATE clientes_ventas 
+        SET saldo_pendiente = saldo_pendiente - ${monto}
+        WHERE id = ${clienteId}
+      `;
+
+      const ventasAbiertas = await sql`
+        SELECT id, saldo_pendiente 
+        FROM ventas_fiado 
+        WHERE cliente_id = ${clienteId} AND saldo_pendiente > 0
+        ORDER BY fecha ASC
+      `;
+
+      let montoRestante = monto;
+
+      for (const venta of ventasAbiertas) {
+        if (montoRestante <= 0) break;
+
+        const saldoVenta = parseFloat(venta.saldo_pendiente);
+        const descuento = Math.min(montoRestante, saldoVenta);
+
+        await sql`
+          UPDATE ventas_fiado 
+          SET saldo_pendiente = saldo_pendiente - ${descuento}
+          WHERE id = ${venta.id}
+        `;
+
+        montoRestante -= descuento;
+      }
+
+      await sql`
+        INSERT INTO movimientos (
+          producto_id, 
+          fecha, 
+          tipo, 
+          cantidad, 
+          motivo, 
+          stock_antes, 
+          stock_despues, 
+          valor_total
+        ) VALUES (
+          NULL,
+          ${today},
+          'Entrada',
+          0,
+          ${`PAGO DE ${clienteNombre} - $${monto.toLocaleString()}`},
+          0,
+          0,
+          ${monto}
+        )
+      `;
+
+      console.log("✅ Pago registrado en movimientos");
+
+      await sql`
+        INSERT INTO pagos (cliente_id, monto, fecha)
+        VALUES (${clienteId}, ${monto}, NOW())
+      `;
+
+      console.log("✅ Pago registrado en historial del cliente");
+
+      await loadAllData();
+      return true;
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Error al registrar pago parcial";
+      console.error("❌ Error en pago parcial:", errorMessage);
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  };
+
   const updateBarcode = async (id: string, barcode: string) => {
     try {
       setError(null);
@@ -545,7 +650,6 @@ export function useInventoryNeon() {
         throw new Error("No hay conexión a la base de datos.");
       }
 
-      // Permitir valores vacíos para borrar el código
       const barcodeValue = barcode.trim() || null;
 
       await sql`
@@ -566,7 +670,6 @@ export function useInventoryNeon() {
     }
   };
 
-  // Eliminar producto (soft delete)
   const deleteProduct = async (id: string) => {
     try {
       setError(null);
@@ -579,7 +682,6 @@ export function useInventoryNeon() {
 
       console.log("🗑️ Desactivando producto (soft delete):", id);
 
-      // Usar función SQL directa en lugar de RPC
       await sql`
         UPDATE productos SET deleted_at = NOW() WHERE id = ${id}
       `;
@@ -597,7 +699,6 @@ export function useInventoryNeon() {
     }
   };
 
-  // Agregar movimiento
   const addMovement = async (
     productId: string,
     type: "entrada" | "salida",
@@ -617,7 +718,6 @@ export function useInventoryNeon() {
         throw new Error("El motivo del movimiento es obligatorio");
       }
 
-      // Obtener el producto actual
       const producto = await sql`
         SELECT stock_actual, precio_venta 
         FROM productos 
@@ -632,14 +732,12 @@ export function useInventoryNeon() {
       const stockDespues =
         type === "entrada" ? stockAntes + quantity : stockAntes - quantity;
 
-      // Validar que no se pueda sacar más stock del disponible
       if (type === "salida" && stockDespues < 0) {
         throw new Error(
           `Stock insuficiente. Disponible: ${stockAntes}, Solicitado: ${quantity}`
         );
       }
 
-      // Insertar el movimiento
       await sql`
         INSERT INTO movimientos (
           producto_id, fecha, tipo, cantidad, motivo, 
@@ -652,7 +750,6 @@ export function useInventoryNeon() {
         )
       `;
 
-      // Actualizar el stock del producto
       await sql`
         UPDATE productos 
         SET stock_actual = ${stockDespues} 
@@ -669,7 +766,6 @@ export function useInventoryNeon() {
     }
   };
 
-  // Actualización masiva de precios por categoría
   const updatePricesByCategory = async (
     category: string,
     percentage: number
@@ -683,7 +779,6 @@ export function useInventoryNeon() {
         );
       }
 
-      // Obtener la categoría
       const categoriaData = await sql`
         SELECT id FROM categorias 
         WHERE nombre = ${category}
@@ -694,7 +789,6 @@ export function useInventoryNeon() {
         throw new Error("Categoría no encontrada");
       }
 
-      // Obtener productos de la categoría (solo no eliminados)
       const productos = await sql`
         SELECT id, precio_venta 
         FROM productos 
@@ -702,7 +796,6 @@ export function useInventoryNeon() {
         AND deleted_at IS NULL
       `;
 
-      // Actualizar precios
       for (const producto of productos) {
         const newPrice = Math.round(
           producto.precio_venta * (1 + percentage / 100)
@@ -724,7 +817,6 @@ export function useInventoryNeon() {
     }
   };
 
-  // Limpiar todos los movimientos
   const clearAllMovements = async () => {
     try {
       setError(null);
@@ -737,7 +829,7 @@ export function useInventoryNeon() {
 
       await sql`DELETE FROM movimientos`;
 
-      await loadAllData(); // Recargar datos
+      await loadAllData();
       console.log("✅ Todos los movimientos eliminados");
     } catch (err) {
       const errorMessage =
@@ -747,7 +839,6 @@ export function useInventoryNeon() {
     }
   };
 
-  // Funciones que funcionan en modo offline
   const getLowStockAlerts = (): StockAlert[] => {
     return products
       .filter((product) => product.quantity <= product.minStock)
@@ -765,7 +856,6 @@ export function useInventoryNeon() {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
-  // Venta rápida: agregar múltiples movimientos de una vez
   const addMovementBulk = async (
     items: Array<{ productId: string; quantity: number }>
   ) => {
@@ -797,7 +887,6 @@ export function useInventoryNeon() {
           throw new Error(`Stock insuficiente en ${item.productId}`);
         }
 
-        // Insertar movimiento
         await sql`
           INSERT INTO movimientos (
             producto_id, fecha, tipo, cantidad, motivo, 
@@ -809,7 +898,6 @@ export function useInventoryNeon() {
           )
         `;
 
-        // Actualizar stock
         await sql`
           UPDATE productos 
           SET stock_actual = ${stockDespues} 
@@ -847,9 +935,6 @@ export function useInventoryNeon() {
     );
   };
 
-  // ===== FUNCIONES DE VENTAS A CRÉDITO =====
-
-  // REGISTRAR VENTA FIADO
   const addVentaFiado = async (
     clienteId: number,
     productos: Array<{ productoId: string; cantidad: number }>
@@ -862,13 +947,11 @@ export function useInventoryNeon() {
       let total = 0;
       const productosConPrecio: any[] = [];
 
-      // Obtener cliente nombre
       const clienteData = await sql`
         SELECT nombre FROM clientes_ventas WHERE id = ${clienteId}
       `;
       const clienteNombre = clienteData[0]?.nombre || `Cliente ${clienteId}`;
 
-      // Obtener precios y validar stock
       for (const item of productos) {
         const prod = await sql`
           SELECT precio_venta, stock_actual, nombre FROM productos WHERE id = ${item.productoId}
@@ -890,7 +973,6 @@ export function useInventoryNeon() {
         });
       }
 
-      // Crear venta
       const ventaResult = await sql`
         INSERT INTO ventas_fiado (cliente_id, total, saldo_pendiente)
         VALUES (${clienteId}, ${total}, ${total})
@@ -900,7 +982,6 @@ export function useInventoryNeon() {
       const ventaId = ventaResult[0].id;
       const today = new Date().toISOString().split("T")[0];
 
-      // Insertar detalles y registrar movimientos
       for (const item of productosConPrecio) {
         await sql`
           INSERT INTO ventas_fiado_detalle 
@@ -908,20 +989,17 @@ export function useInventoryNeon() {
           VALUES (${ventaId}, ${item.productoId}, ${item.nombre}, ${item.cantidad}, ${item.precio}, ${item.subtotal})
         `;
 
-        // Obtener stock actual
         const stockAntes = await sql`
           SELECT stock_actual FROM productos WHERE id = ${item.productoId}
         `;
         const stockActual = stockAntes[0].stock_actual;
         const stockDespues = stockActual - item.cantidad;
 
-        // Descontar stock
         await sql`
           UPDATE productos SET stock_actual = stock_actual - ${item.cantidad}
           WHERE id = ${item.productoId}
         `;
 
-        // REGISTRAR MOVIMIENTO CON TIPO FIADO
         await sql`
           INSERT INTO movimientos (
             producto_id, fecha, tipo, cantidad, motivo, 
@@ -939,7 +1017,6 @@ export function useInventoryNeon() {
         `;
       }
 
-      // Actualizar saldo cliente
       await sql`
         UPDATE clientes_ventas SET saldo_pendiente = saldo_pendiente + ${total}
         WHERE id = ${clienteId}
@@ -955,7 +1032,6 @@ export function useInventoryNeon() {
     }
   };
 
-  // MARCAR PRODUCTOS COMO PAGADOS
   const marcarProductosPagados = async (
     detalleIds: number[],
     ventaId: number
@@ -973,7 +1049,6 @@ export function useInventoryNeon() {
 
       const clienteId = venta[0].cliente_id;
 
-      // Marcar detalles como pagados
       for (const detalleId of detalleIds) {
         const detalle = await sql`
           SELECT subtotal, pagado FROM ventas_fiado_detalle WHERE id = ${detalleId}
@@ -991,21 +1066,18 @@ export function useInventoryNeon() {
       }
 
       if (totalPagado > 0) {
-        // Actualizar venta
         await sql`
           UPDATE ventas_fiado 
           SET saldo_pendiente = saldo_pendiente - ${totalPagado}
           WHERE id = ${ventaId}
         `;
 
-        // Actualizar cliente
         await sql`
           UPDATE clientes_ventas 
           SET saldo_pendiente = saldo_pendiente - ${totalPagado}
           WHERE id = ${clienteId}
         `;
 
-        // Registrar pago
         await sql`
           INSERT INTO pagos (cliente_id, venta_fiado_id, monto)
           VALUES (${clienteId}, ${ventaId}, ${totalPagado})
@@ -1022,12 +1094,10 @@ export function useInventoryNeon() {
     }
   };
 
-  // OBTENER VENTAS DE UN CLIENTE
   const getVentasByCliente = (clienteId: number) => {
     return ventasFiado.filter((v) => v.clienteId === clienteId);
   };
 
-  // ⬅️ ELIMINAR CLIENTE (FUNCIÓN CORREGIDA)
   const deleteCliente = async (clienteId: number): Promise<boolean> => {
     try {
       setError(null);
@@ -1038,7 +1108,6 @@ export function useInventoryNeon() {
 
       console.log("🗑️ Eliminando cliente y sus ventas asociadas...");
 
-      // 1. Obtener todas las ventas del cliente
       const ventas = await sql`
         SELECT id FROM ventas_fiado WHERE cliente_id = ${clienteId}
       `;
@@ -1046,7 +1115,6 @@ export function useInventoryNeon() {
       if (ventas.length > 0) {
         const ventaIds = ventas.map((v: any) => v.id);
 
-        // 2. Eliminar detalles de ventas (uno por uno para evitar problemas con ANY)
         for (const ventaId of ventaIds) {
           await sql`
             DELETE FROM ventas_fiado_detalle 
@@ -1055,14 +1123,12 @@ export function useInventoryNeon() {
         }
         console.log(`✅ Eliminados detalles de ${ventaIds.length} ventas`);
 
-        // 3. Eliminar pagos asociados
         await sql`
           DELETE FROM pagos 
           WHERE cliente_id = ${clienteId}
         `;
         console.log("✅ Eliminados pagos del cliente");
 
-        // 4. Eliminar las ventas (una por una)
         for (const ventaId of ventaIds) {
           await sql`
             DELETE FROM ventas_fiado 
@@ -1072,7 +1138,6 @@ export function useInventoryNeon() {
         console.log(`✅ Eliminadas ${ventaIds.length} ventas`);
       }
 
-      // 5. Eliminar el cliente
       await sql`
         DELETE FROM clientes_ventas 
         WHERE id = ${clienteId}
@@ -1091,39 +1156,34 @@ export function useInventoryNeon() {
   };
 
   return {
-    // Productos y movimientos
     products,
     movements,
     priceHistory,
-    // Clientes y ventas a crédito
     clientesVentas,
     ventasFiado,
-    // Estados
+    pagos,
     loading,
     error,
     connectionStatus,
-    // Funciones productos
     addProduct,
     updateProduct,
     deleteProduct,
     updateBarcode,
-    // Funciones movimientos
     addMovement,
     addMovementBulk,
     clearAllMovements,
-    // Funciones de análisis
     getLowStockAlerts,
     getMovementsByProduct,
     getPriceHistoryByProduct,
     updatePricesByCategory,
     getTotalInventoryValue,
     getTotalInventoryCost,
-    // Funciones de ventas a crédito
     addCliente,
     addVentaFiado,
     marcarProductosPagados,
     getVentasByCliente,
     deleteCliente,
+    registrarPagoParcial,
     refreshData: loadAllData,
     retryConnection: initializeConnection,
   };

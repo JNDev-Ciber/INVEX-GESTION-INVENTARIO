@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
 import { pdf } from "@react-pdf/renderer";
 import { saveAs } from "file-saver";
 import NotaVentaPDF from "./notaVentaPDF";
@@ -22,11 +23,17 @@ import {
   Package,
   AlertTriangle,
 } from "lucide-react";
-import type { ClienteVenta, VentaFiado, Product } from "../types/inventory";
+import type {
+  ClienteVenta,
+  VentaFiado,
+  Product,
+  Pago,
+} from "../types/inventory";
 
 interface ClientesVentasManagerProps {
   clientes: ClienteVenta[];
   ventasFiado: VentaFiado[];
+  pagos: Pago[];
   products: Product[];
   onAddCliente?: (
     nombre: string,
@@ -39,18 +46,26 @@ interface ClientesVentasManagerProps {
   ) => Promise<{ success: boolean; ventaId: any; total: number }>;
   onMarcarPagados: (detalleIds: number[], ventaId: number) => Promise<boolean>;
   onDeleteCliente?: (clienteId: number) => Promise<boolean>;
+  onRegistrarPagoParcial?: (
+    clienteId: number,
+    monto: number
+  ) => Promise<boolean>;
 }
 
 export function ClientesVentasManager({
   clientes,
   ventasFiado,
   products,
+  pagos,
   onAddCliente,
   onAddVentaFiado,
   onMarcarPagados,
+  onRegistrarPagoParcial,
   onDeleteCliente,
 }: ClientesVentasManagerProps) {
+  // ✅ TODOS LOS ESTADOS DECLARADOS CORRECTAMENTE
   const [searchTerm, setSearchTerm] = useState("");
+  const [montoPago, setMontoPago] = useState<string>("");
   const [productSearchTerm, setProductSearchTerm] = useState("");
   const [filterDeuda, setFilterDeuda] = useState<"todos" | "saldo" | "pagado">(
     "todos"
@@ -72,12 +87,45 @@ export function ClientesVentasManager({
     cuit: "",
     telefono: "",
   });
-
-  // ⬅️ NUEVO: Estados para el modal de eliminación
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [clienteToDelete, setClienteToDelete] = useState<ClienteVenta | null>(
     null
   );
+
+  const handlePagoParcial = async () => {
+    if (!selectedCliente || !montoPago) return;
+
+    if (!onRegistrarPagoParcial) {
+      console.error("⚠️ Función de pago no disponible");
+      return;
+    }
+
+    const monto = parseFloat(montoPago);
+
+    if (monto <= 0 || monto > selectedCliente.saldoPendiente) {
+      console.error("⚠️ Monto inválido");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await onRegistrarPagoParcial(selectedCliente.id, monto);
+
+      // ✅ Actualizar el cliente seleccionado con el nuevo saldo
+      const nuevoSaldo = Math.max(0, selectedCliente.saldoPendiente - monto);
+      setSelectedCliente({
+        ...selectedCliente,
+        saldoPendiente: nuevoSaldo,
+      });
+
+      setMontoPago("");
+      console.log(`✅ Pago de $${monto.toLocaleString()} registrado`);
+    } catch (err) {
+      console.error("Error al registrar pago:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const filteredClientes = useMemo(() => {
     return clientes
@@ -218,7 +266,6 @@ export function ClientesVentasManager({
     }
   };
 
-  // ⬅️ NUEVO: Abrir modal de confirmación
   const openDeleteModal = (cliente: ClienteVenta, e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
@@ -227,7 +274,6 @@ export function ClientesVentasManager({
     setShowDeleteModal(true);
   };
 
-  // ⬅️ NUEVO: Confirmar eliminación
   const confirmDelete = async () => {
     if (!clienteToDelete) return;
 
@@ -318,15 +364,97 @@ export function ClientesVentasManager({
 
             {/* Deuda */}
             {selectedCliente.saldoPendiente > 0 ? (
-              <Alert className="bg-red-50 border-red-300">
-                <DollarSign className="h-5 w-5 text-red-600" />
-                <AlertDescription className="text-red-700">
-                  <div className="text-xs font-medium">SALDO</div>
-                  <div className="text-2xl font-bold">
-                    ${selectedCliente.saldoPendiente.toLocaleString()}
+              <div className="space-y-3">
+                <Alert className="bg-red-50 border-red-300">
+                  <DollarSign className="h-5 w-5 text-red-600" />
+                  <AlertDescription className="text-red-700">
+                    <div className="text-xs font-medium">SALDO TOTAL</div>
+                    <div className="text-2xl font-bold">
+                      ${selectedCliente.saldoPendiente.toLocaleString()}
+                    </div>
+                  </AlertDescription>
+                </Alert>
+
+                {/* Input de pago parcial */}
+                <Card className="p-3 bg-white border-2 border-blue-300">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-blue-900">
+                      PAGO PARCIAL
+                    </Label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-2.5 text-sm font-bold text-blue-600">
+                          $
+                        </span>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          value={montoPago}
+                          onChange={(e) => setMontoPago(e.target.value)}
+                          className="pl-7 font-bold text-lg"
+                          min="0"
+                          max={selectedCliente.saldoPendiente}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Mostrar saldo restante si hay un monto ingresado */}
+                    {montoPago && parseFloat(montoPago) > 0 && (
+                      <div className="pt-2 border-t">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            Saldo actual:
+                          </span>
+                          <span className="font-semibold">
+                            ${selectedCliente.saldoPendiente.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Pago:</span>
+                          <span className="font-semibold text-green-600">
+                            -${parseFloat(montoPago).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-base font-bold border-t mt-1 pt-1">
+                          <span>Nuevo saldo:</span>
+                          <span
+                            className={
+                              selectedCliente.saldoPendiente -
+                                parseFloat(montoPago) >
+                              0
+                                ? "text-red-600"
+                                : "text-green-600"
+                            }
+                          >
+                            $
+                            {Math.max(
+                              0,
+                              selectedCliente.saldoPendiente -
+                                parseFloat(montoPago)
+                            ).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Botón de confirmar pago */}
+                    <Button
+                      onClick={handlePagoParcial}
+                      disabled={
+                        isLoading ||
+                        !montoPago ||
+                        parseFloat(montoPago) <= 0 ||
+                        parseFloat(montoPago) > selectedCliente.saldoPendiente
+                      }
+                      className="w-full"
+                      size="sm"
+                    >
+                      <Check className="h-4 w-4 mr-2" />
+                      Registrar Pago
+                    </Button>
                   </div>
-                </AlertDescription>
-              </Alert>
+                </Card>
+              </div>
             ) : (
               <Alert className="bg-green-50 border-green-300">
                 <Check className="h-5 w-5 text-green-600" />
@@ -489,7 +617,11 @@ export function ClientesVentasManager({
                 onClick={() => setActiveTab("historial")}
               >
                 <Package className="h-4 w-4 mr-1" />
-                Historial ({todasVentas.length})
+                Historial (
+                {todasVentas.length +
+                  pagos.filter((p) => p.cliente_id === selectedCliente.id)
+                    .length}
+                )
               </Button>
             </div>
 
@@ -588,51 +720,110 @@ export function ClientesVentasManager({
             {/* TAB: HISTORIAL */}
             {activeTab === "historial" && (
               <div className="space-y-3">
-                {todasVentas.length > 0 ? (
-                  todasVentas.map((venta) => (
-                    <Card
-                      key={venta.id}
-                      className={`p-4 border-l-4 ${
-                        venta.saldoPendiente > 0
-                          ? "border-l-red-500"
-                          : "border-l-green-500"
-                      }`}
-                    >
-                      <div className="flex justify-between mb-2">
-                        <div>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(venta.fecha).toLocaleDateString("es-AR")}
-                          </p>
-                          {venta.saldoPendiente > 0 ? (
-                            <p className="text-red-600 font-bold">
-                              Debe: ${venta.saldoPendiente.toLocaleString()}
-                            </p>
-                          ) : (
-                            <p className="text-green-600 font-bold">✓ Pagado</p>
-                          )}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleGenerarPDF(venta)}
-                          disabled={isLoading}
-                        >
-                          <FileDown className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      {venta.detalles?.map((d) => (
-                        <p key={d.id} className="text-xs text-muted-foreground">
-                          {d.productoNombre}: {d.cantidad} × $
-                          {d.precioUnitario.toLocaleString()}
-                        </p>
-                      ))}
-                    </Card>
-                  ))
-                ) : (
-                  <p className="text-center py-8 text-muted-foreground">
-                    Sin historial
-                  </p>
-                )}
+                {/* ✅ Combinar ventas y pagos, ordenados por fecha */}
+                {(() => {
+                  const clientePagos = pagos.filter(
+                    (p) => p.cliente_id === selectedCliente.id
+                  );
+
+                  // Crear array combinado de ventas y pagos
+                  const historialCombinado = [
+                    ...todasVentas.map((v) => ({
+                      tipo: "venta",
+                      data: v,
+                      fecha: new Date(v.fecha),
+                    })),
+                    ...clientePagos.map((p) => ({
+                      tipo: "pago",
+                      data: p,
+                      fecha: new Date(p.fecha),
+                    })),
+                  ].sort((a, b) => b.fecha.getTime() - a.fecha.getTime());
+
+                  return historialCombinado.length > 0 ? (
+                    historialCombinado.map((item, index) => {
+                      if (item.tipo === "pago") {
+                        const pago = item.data as Pago;
+                        return (
+                          <Card
+                            key={`pago-${pago.id}`}
+                            className="p-4 border-l-4 border-l-blue-500 bg-blue-50/30"
+                          >
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(pago.fecha).toLocaleDateString(
+                                    "es-AR"
+                                  )}
+                                </p>
+                                <p className="text-green-600 font-bold flex items-center gap-2">
+                                  <DollarSign className="h-4 w-4" />
+                                  Pago parcial: ${pago.monto.toLocaleString()}
+                                </p>
+                              </div>
+                              <Badge className="bg-green-100 text-green-800 border-green-300">
+                                💵 Pago
+                              </Badge>
+                            </div>
+                          </Card>
+                        );
+                      } else {
+                        const venta = item.data as VentaFiado;
+                        return (
+                          <Card
+                            key={`venta-${venta.id}`}
+                            className={`p-4 border-l-4 ${
+                              venta.saldoPendiente > 0
+                                ? "border-l-red-500"
+                                : "border-l-green-500"
+                            }`}
+                          >
+                            <div className="flex justify-between mb-2">
+                              <div>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(venta.fecha).toLocaleDateString(
+                                    "es-AR"
+                                  )}
+                                </p>
+                                {venta.saldoPendiente > 0 ? (
+                                  <p className="text-red-600 font-bold">
+                                    Debe: $
+                                    {venta.saldoPendiente.toLocaleString()}
+                                  </p>
+                                ) : (
+                                  <p className="text-green-600 font-bold">
+                                    ✓ Pagado
+                                  </p>
+                                )}
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleGenerarPDF(venta)}
+                                disabled={isLoading}
+                              >
+                                <FileDown className="h-3 w-3" />
+                              </Button>
+                            </div>
+                            {venta.detalles?.map((d) => (
+                              <p
+                                key={d.id}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {d.productoNombre}: {d.cantidad} × $
+                                {d.precioUnitario.toLocaleString()}
+                              </p>
+                            ))}
+                          </Card>
+                        );
+                      }
+                    })
+                  ) : (
+                    <p className="text-center py-8 text-muted-foreground">
+                      Sin historial
+                    </p>
+                  );
+                })()}
               </div>
             )}
           </div>

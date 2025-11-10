@@ -177,14 +177,27 @@ export function MovementHistory({
   const valorTotalEntradas = filteredMovements
     .filter((m) => m.type === "entrada")
     .reduce((sum, m) => {
-      const product = products.find((p) => p.id === m.productId);
-      return sum + (product?.price || 0) * m.quantity;
+      // ✅ Usar valor_total si existe, sino calcular
+      const value =
+        m.valor_total ||
+        (() => {
+          const product = products.find((p) => p.id === m.productId);
+          return (product?.price || 0) * m.quantity;
+        })();
+      return sum + value;
     }, 0);
+
   const valorTotalSalidas = filteredMovements
     .filter((m) => m.type === "salida")
     .reduce((sum, m) => {
-      const product = products.find((p) => p.id === m.productId);
-      return sum + (product?.price || 0) * m.quantity;
+      // ✅ Usar valor_total si existe, sino calcular
+      const value =
+        m.valor_total ||
+        (() => {
+          const product = products.find((p) => p.id === m.productId);
+          return (product?.price || 0) * m.quantity;
+        })();
+      return sum + value;
     }, 0);
 
   const columns = [
@@ -216,6 +229,13 @@ export function MovementHistory({
       label: "Producto",
       render: (_: any, movement: Movement) => {
         const product = products.find((p) => p.id === movement.productId);
+
+        // ✅ Solo usar reason cuando NO hay producto_id
+        const displayName =
+          movement.productId === null
+            ? movement.reason || "💵 Pago de cliente"
+            : product?.name || "Producto eliminado";
+
         return (
           <div className="space-y-1">
             <div
@@ -223,19 +243,22 @@ export function MovementHistory({
                 isDark ? "text-gray-200" : "text-gray-900"
               }`}
             >
-              {product?.name || "Producto eliminado"}
+              {displayName}
             </div>
-            <div
-              className={`text-sm ${
-                isDark ? "text-gray-400" : "text-gray-500"
-              }`}
-            >
-              {product?.code}
-            </div>
+            {product?.code && (
+              <div
+                className={`text-sm ${
+                  isDark ? "text-gray-400" : "text-gray-500"
+                }`}
+              >
+                {product.code}
+              </div>
+            )}
           </div>
         );
       },
     },
+
     {
       key: "type",
       label: "Tipo",
@@ -303,8 +326,14 @@ export function MovementHistory({
       key: "value",
       label: "Valor",
       render: (_: any, movement: Movement) => {
-        const product = products.find((p) => p.id === movement.productId);
-        const value = (product?.price || 0) * movement.quantity;
+        // ✅ Usar valor_total de la BD si existe, sino calcular
+        const value =
+          movement.valor_total ||
+          (() => {
+            const product = products.find((p) => p.id === movement.productId);
+            return (product?.price || 0) * movement.quantity;
+          })();
+
         return (
           <span
             className={`font-medium ${
@@ -327,7 +356,11 @@ export function MovementHistory({
   // Componente de Card para vista móvil
   const MovementCard = ({ movement }: { movement: Movement }) => {
     const product = products.find((p) => p.id === movement.productId);
-    const value = (product?.price || 0) * movement.quantity;
+    const value =
+      movement.valor_total || (product?.price || 0) * movement.quantity;
+    const displayName = movement.productId
+      ? product?.name || "Producto eliminado"
+      : movement.reason || "💵 Pago de cliente";
 
     return (
       <Card
@@ -344,8 +377,9 @@ export function MovementHistory({
                   isDark ? "text-gray-100" : "text-gray-900"
                 }`}
               >
-                {product?.name || "Producto eliminado"}
+                {displayName}
               </h3>
+
               <p
                 className={`text-sm ${
                   isDark ? "text-gray-400" : "text-gray-500"
