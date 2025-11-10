@@ -384,11 +384,15 @@ export function useInventoryNeon() {
           codigo, nombre, descripcion, categoria_id, subcategoria_id, stock_actual, 
           stock_minimo, costo_unitario, precio_venta, imagen_url, codigo_barras
         ) VALUES (
-          ${productData.code}, ${productData.name}, ${productData.description || null}, 
+          ${productData.code}, ${productData.name}, ${
+        productData.description || null
+      }, 
           ${categoriaId}, ${subcategoriaId}, ${productData.quantity}, ${
         productData.minStock
       }, 
-          ${productData.cost}, ${productData.price}, ${productData.imageUrl || null}, 
+          ${productData.cost}, ${productData.price}, ${
+        productData.imageUrl || null
+      }, 
           ${productData.barcode || null}
         )
       `;
@@ -404,11 +408,7 @@ export function useInventoryNeon() {
   };
 
   // AGREGAR CLIENTE
-  const addCliente = async (
-    nombre: string,
-    cuit: string,
-    telefono: string
-  ) => {
+  const addCliente = async (nombre: string, cuit: string, telefono: string) => {
     try {
       setError(null);
       if (connectionStatus === "offline")
@@ -545,9 +545,12 @@ export function useInventoryNeon() {
         throw new Error("No hay conexión a la base de datos.");
       }
 
+      // Permitir valores vacíos para borrar el código
+      const barcodeValue = barcode.trim() || null;
+
       await sql`
         UPDATE productos 
-        SET codigo_barras = ${barcode}
+        SET codigo_barras = ${barcodeValue}
         WHERE id = ${id}
       `;
 
@@ -963,7 +966,8 @@ export function useInventoryNeon() {
         throw new Error("No hay conexión a la base de datos.");
 
       let totalPagado = 0;
-      const venta = await sql`SELECT cliente_id FROM ventas_fiado WHERE id = ${ventaId}`;
+      const venta =
+        await sql`SELECT cliente_id FROM ventas_fiado WHERE id = ${ventaId}`;
 
       if (venta.length === 0) throw new Error("Venta no encontrada");
 
@@ -1027,21 +1031,21 @@ export function useInventoryNeon() {
   const deleteCliente = async (clienteId: number): Promise<boolean> => {
     try {
       setError(null);
-      
+
       if (connectionStatus === "offline") {
         throw new Error("No hay conexión a la base de datos.");
       }
-  
+
       console.log("🗑️ Eliminando cliente y sus ventas asociadas...");
-  
+
       // 1. Obtener todas las ventas del cliente
       const ventas = await sql`
         SELECT id FROM ventas_fiado WHERE cliente_id = ${clienteId}
       `;
-  
+
       if (ventas.length > 0) {
         const ventaIds = ventas.map((v: any) => v.id);
-        
+
         // 2. Eliminar detalles de ventas (uno por uno para evitar problemas con ANY)
         for (const ventaId of ventaIds) {
           await sql`
@@ -1050,14 +1054,14 @@ export function useInventoryNeon() {
           `;
         }
         console.log(`✅ Eliminados detalles de ${ventaIds.length} ventas`);
-  
+
         // 3. Eliminar pagos asociados
         await sql`
           DELETE FROM pagos 
           WHERE cliente_id = ${clienteId}
         `;
         console.log("✅ Eliminados pagos del cliente");
-  
+
         // 4. Eliminar las ventas (una por una)
         for (const ventaId of ventaIds) {
           await sql`
@@ -1067,14 +1071,14 @@ export function useInventoryNeon() {
         }
         console.log(`✅ Eliminadas ${ventaIds.length} ventas`);
       }
-  
+
       // 5. Eliminar el cliente
       await sql`
         DELETE FROM clientes_ventas 
         WHERE id = ${clienteId}
       `;
       console.log("✅ Cliente eliminado exitosamente");
-  
+
       await loadAllData();
       return true;
     } catch (err) {
@@ -1119,7 +1123,7 @@ export function useInventoryNeon() {
     addVentaFiado,
     marcarProductosPagados,
     getVentasByCliente,
-    deleteCliente, 
+    deleteCliente,
     refreshData: loadAllData,
     retryConnection: initializeConnection,
   };
