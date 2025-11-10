@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -102,6 +102,9 @@ export default function FacturaVentaForm({
   const { toast } = useToast();
   const [showClienteDropdown, setShowClienteDropdown] = useState(false);
   const [searchClienteTerm, setSearchClienteTerm] = useState("");
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const barcodeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastBarcodeTimeRef = useRef<number>(0);
 
   const filteredClientes = useMemo(() => {
     if (!searchClienteTerm) return clientes;
@@ -112,7 +115,6 @@ export default function FacturaVentaForm({
     );
   }, [clientes, searchClienteTerm]);
 
-  // ⬅️ NUEVA FUNCIÓN - sin cerrar modal
   const agregarProductoDelModal = (product: Product) => {
     if (product.quantity <= 0) {
       toast({
@@ -144,6 +146,38 @@ export default function FacturaVentaForm({
     });
 
     // ⬅️ NO cierra el modal
+  };
+
+  const validateBarcode = (barcode: string): boolean => {
+    const cleaned = barcode.trim().replace(/\s+/g, "");
+
+    if (!cleaned) return false;
+    if (!/^\d{5,}$/.test(cleaned)) return false;
+    if (cleaned.length < 5 || cleaned.length > 128) return false;
+
+    return true;
+  };
+
+  const findProductByBarcode = (barcode: string): Product | undefined => {
+    const cleaned = barcode.trim().replace(/\s+/g, "");
+
+    console.log(`🔍 Buscando barcode: ${cleaned}`);
+
+    const product = products.find((p) => {
+      const productBarcode = p.barcode
+        ? p.barcode.trim().replace(/\s+/g, "")
+        : "";
+      return productBarcode === cleaned;
+    });
+
+    if (!product) {
+      console.log("❌ No encontrado. Barcodes disponibles:");
+      products.forEach((p) => {
+        if (p.barcode) console.log(`   - ${p.name}: ${p.barcode}`);
+      });
+    }
+
+    return product;
   };
 
   // Estados principales
@@ -334,6 +368,76 @@ export default function FacturaVentaForm({
       duration: 2000,
     });
   };
+
+  // ✅ USEEFFECT PARA PROCESAR BARCODE CON DEBOUNCE
+  useEffect(() => {
+    if (barcodeTimeoutRef.current) {
+      clearTimeout(barcodeTimeoutRef.current);
+    }
+
+    if (!barcodeInput.trim() || barcodeInput.length < 5) {
+      return;
+    }
+
+    const now = Date.now();
+    const timeSinceLastScan = now - lastBarcodeTimeRef.current;
+    const delay = timeSinceLastScan < 100 ? 150 : 100;
+
+    barcodeTimeoutRef.current = setTimeout(() => {
+      if (!validateBarcode(barcodeInput)) {
+        toast({
+          title: "⚠️ Código inválido",
+          description: `"${barcodeInput}" no es válido`,
+          variant: "destructive",
+          duration: 800,
+        });
+        setBarcodeInput("");
+        lastBarcodeTimeRef.current = Date.now();
+        return;
+      }
+
+      const product = findProductByBarcode(barcodeInput);
+
+      if (!product) {
+        toast({
+          title: "❌ No encontrado",
+          description: `${barcodeInput}`,
+          variant: "destructive",
+          duration: 800,
+        });
+        setBarcodeInput("");
+        lastBarcodeTimeRef.current = Date.now();
+        return;
+      }
+
+      if (product.quantity <= 0) {
+        toast({
+          title: "❌ Sin stock",
+          description: product.name,
+          variant: "destructive",
+          duration: 800,
+        });
+        setBarcodeInput("");
+        lastBarcodeTimeRef.current = Date.now();
+        return;
+      }
+
+      // ✅ Agregar producto al carrito
+      agregarProductoDelModal(product);
+
+      setBarcodeInput("");
+      lastBarcodeTimeRef.current = Date.now();
+    }, delay);
+  }, [barcodeInput, products, toast]);
+
+  // ✅ LIMPIAR TIMEOUT AL DESMONTAR
+  useEffect(() => {
+    return () => {
+      if (barcodeTimeoutRef.current) {
+        clearTimeout(barcodeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Calcular totales
   useEffect(() => {
@@ -1225,28 +1329,14 @@ export default function FacturaVentaForm({
               <Input
                 autoFocus
                 placeholder="Escanea aquí..."
-                onChange={(e) => {
-                  const barcode = e.target.value.trim();
-                  if (barcode.length >= 5) {
-                    const productoEncontrado = products.find(
-                      (p) => p.barcode === barcode
-                    );
-                    if (productoEncontrado && productoEncontrado.quantity > 0) {
-                      agregarProductoDelModal(productoEncontrado);
-                      e.target.value = "";
-                    } else {
-                      toast({
-                        title: "❌ No encontrado",
-                        description: "Producto sin stock o código inválido",
-                        variant: "destructive",
-                        duration: 1000,
-                      });
-                      e.target.value = "";
-                    }
-                  }
-                }}
+                value={barcodeInput}
+                onChange={(e) => setBarcodeInput(e.target.value)}
                 className="bg-white border-blue-300 focus:border-blue-500"
               />
+              <div className="text-xs text-blue-600 mt-2">
+                {products.filter((p) => p.barcode?.trim()).length} productos con
+                código
+              </div>
             </div>
 
             {/* Lista de productos */}
