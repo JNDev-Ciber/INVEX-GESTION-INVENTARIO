@@ -120,6 +120,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
     retryConnection,
     clientesVentas,
     ventasFiado,
+    addDeudaDirecta,
     pagos,
     addVentaFiado,
     addCliente,
@@ -562,6 +563,8 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
             ventasFiado={ventasFiado}
             products={products}
             pagos={pagos}
+            onAddCliente={addCliente}
+            onAddDeudaDirecta={addDeudaDirecta}
             onAddVentaFiado={addVentaFiado}
             onMarcarPagados={marcarProductosPagados}
             onDeleteCliente={deleteCliente}

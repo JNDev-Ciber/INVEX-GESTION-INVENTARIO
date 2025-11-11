@@ -432,6 +432,87 @@ export function useInventoryNeon() {
     }
   };
 
+  const addDeudaDirecta = async (
+    clienteId: number,
+    monto: number,
+    concepto: string
+  ): Promise<boolean> => {
+    try {
+      setError(null);
+      
+      if (connectionStatus === "offline") {
+        throw new Error("No hay conexión a la base de datos.");
+      }
+  
+      if (monto <= 0) {
+        throw new Error("El monto debe ser mayor a 0");
+      }
+  
+      const today = new Date().toISOString().split("T")[0];
+  
+      console.log(`💰 Registrando deuda manual de $${monto} para cliente ${clienteId}`);
+  
+      // Crear una venta sin productos
+      const ventaResult = await sql`
+        INSERT INTO ventas_fiado (cliente_id, total, saldo_pendiente)
+        VALUES (${clienteId}, ${monto}, ${monto})
+        RETURNING id
+      `;
+  
+      const ventaId = ventaResult[0].id;
+  
+      // Insertar un detalle especial para la deuda manual
+      await sql`
+        INSERT INTO ventas_fiado_detalle 
+        (venta_fiado_id, producto_id, producto_nombre, cantidad, precio_unitario, subtotal)
+        VALUES (${ventaId}, NULL, ${concepto || "Deuda manual"}, 1, ${monto}, ${monto})
+      `;
+  
+      // Actualizar saldo del cliente
+      await sql`
+        UPDATE clientes_ventas 
+        SET saldo_pendiente = saldo_pendiente + ${monto}
+        WHERE id = ${clienteId}
+      `;
+  
+      // Obtener nombre del cliente para el movimiento
+      const clienteData = await sql`
+        SELECT nombre FROM clientes_ventas WHERE id = ${clienteId}
+      `;
+      const clienteNombre = clienteData[0]?.nombre || `Cliente ${clienteId}`;
+  
+      // Registrar movimiento
+      await sql`
+        INSERT INTO movimientos (
+          producto_id, fecha, tipo, cantidad, motivo, 
+          stock_antes, stock_despues, valor_total
+        ) VALUES (
+          NULL, 
+          ${today}, 
+          'Salida', 
+          0, 
+          ${`DEUDA MANUAL - ${clienteNombre}: ${concepto || "Sin concepto"}`},
+          0,
+          0,
+          ${monto}
+        )
+      `;
+  
+      console.log("✅ Deuda manual registrada exitosamente");
+  
+      await loadAllData();
+      return true;
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Error registrando deuda";
+      console.error("❌ Error en deuda manual:", errorMessage);
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    }
+  };
+  
+  
+
   const updateProduct = async (id: string, updates: any) => {
     try {
       setError(null);
@@ -1189,7 +1270,9 @@ export function useInventoryNeon() {
     getVentasByCliente,
     deleteCliente,
     registrarPagoParcial,
+    addDeudaDirecta,
     refreshData: loadAllData,
     retryConnection: initializeConnection,
+   
   };
 }

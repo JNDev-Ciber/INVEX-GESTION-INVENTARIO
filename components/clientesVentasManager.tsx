@@ -46,6 +46,11 @@ interface ClientesVentasManagerProps {
   ) => Promise<{ success: boolean; ventaId: any; total: number }>;
   onMarcarPagados: (detalleIds: number[], ventaId: number) => Promise<boolean>;
   onDeleteCliente?: (clienteId: number) => Promise<boolean>;
+  onAddDeudaDirecta?: (
+    clienteId: number,
+    monto: number,
+    concepto: string
+  ) => Promise<boolean>;
   onRegistrarPagoParcial?: (
     clienteId: number,
     monto: number
@@ -62,11 +67,18 @@ export function ClientesVentasManager({
   onMarcarPagados,
   onRegistrarPagoParcial,
   onDeleteCliente,
+  onAddDeudaDirecta,
 }: ClientesVentasManagerProps) {
   // ✅ TODOS LOS ESTADOS DECLARADOS CORRECTAMENTE
   const [searchTerm, setSearchTerm] = useState("");
   const [montoPago, setMontoPago] = useState<string>("");
   const [productSearchTerm, setProductSearchTerm] = useState("");
+  const [tipoOperacion, setTipoOperacion] = useState<"productos" | "deuda">(
+    "productos"
+  );
+  const [montoDeuda, setMontoDeuda] = useState<string>("");
+  const [conceptoDeuda, setConceptoDeuda] = useState<string>("");
+
   const [filterDeuda, setFilterDeuda] = useState<"todos" | "saldo" | "pagado">(
     "todos"
   );
@@ -162,17 +174,39 @@ export function ClientesVentasManager({
     ventasFiado.filter((v) => v.clienteId === clienteId);
 
   const handleAddCliente = async () => {
-    if (!formCliente.nombre || !formCliente.cuit) return;
-    if (!onAddCliente) return;
+    console.log("🔍 INICIO handleAddCliente");
+    console.log("📝 Datos del form:", formCliente);
+    console.log("🎯 onAddCliente existe?", !!onAddCliente);
+    console.log("🎯 onAddCliente es función?", typeof onAddCliente);
+
+    if (!formCliente.nombre || !formCliente.cuit) {
+      console.warn("⚠️ Validación falló");
+      return;
+    }
+
+    if (!onAddCliente) {
+      console.error("❌ onAddCliente NO ESTÁ DEFINIDO!");
+      alert("Error: La función onAddCliente no está disponible");
+      return;
+    }
+
     setIsLoading(true);
+    console.log("📤 Llamando a onAddCliente...");
+
     try {
       await onAddCliente(
         formCliente.nombre,
         formCliente.cuit,
         formCliente.telefono
       );
+      console.log("✅ Cliente agregado exitosamente");
       setShowAddClienteForm(false);
       setFormCliente({ nombre: "", cuit: "", telefono: "" });
+    } catch (err) {
+      console.error("❌ Error al agregar cliente:", err);
+      alert(
+        `Error: ${err instanceof Error ? err.message : "Error desconocido"}`
+      );
     } finally {
       setIsLoading(false);
     }
@@ -467,137 +501,255 @@ export function ClientesVentasManager({
 
           {/* COLUMNA DERECHA: Venta + Historial */}
           <div className="lg:col-span-4 space-y-4">
-            {/* NUEVA VENTA */}
-            <Card className="p-4 bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-300">
-              <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
-                <ShoppingCart className="h-5 w-5" />
-                Nueva Venta
-              </h3>
-
-              {/* Buscador rápido */}
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  autoFocus
-                  placeholder="Buscar producto..."
-                  value={productSearchTerm}
-                  onChange={(e) => setProductSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+            {/* NUEVA VENTA / DEUDA MANUAL CON TABS */}
+            <Card className="p-4 bg-white ">
+              {/* Tabs de operación */}
+              <div className="flex gap-2 mb-3">
+                <Button
+                  variant={
+                    tipoOperacion === "productos" ? "default" : "outline"
+                  }
+                  size="sm"
+                  onClick={() => setTipoOperacion("productos")}
+                  className="flex-1"
+                >
+                  <ShoppingCart className="h-4 w-4 mr-1" />
+                  Productos
+                </Button>
+                <Button
+                  variant={tipoOperacion === "deuda" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setTipoOperacion("deuda")}
+                  className="flex-1"
+                >
+                  <DollarSign className="h-4 w-4 mr-1" />
+                  Deuda Manual
+                </Button>
               </div>
 
-              {/* Productos sugeridos */}
-              {productSearchTerm && filteredProducts.length > 0 && (
-                <div className="mb-3 max-h-40 overflow-y-auto bg-white rounded border">
-                  {filteredProducts.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        agregarProductoRapido(p.id);
-                        setProductSearchTerm("");
-                      }}
-                      className="w-full p-2 hover:bg-emerald-100 text-left border-b last:border-b-0 transition-colors"
-                    >
-                      <div className="flex justify-between">
-                        <div>
-                          <p className="font-semibold text-sm">{p.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Stock: {p.quantity}
-                          </p>
-                        </div>
-                        <p className="font-bold text-emerald-600">
-                          ${p.price.toLocaleString()}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+              {/* TAB: PRODUCTOS */}
+              {tipoOperacion === "productos" && (
+                <>
+                  <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
+                    <ShoppingCart className="h-5 w-5" />
+                    Nueva Venta
+                  </h3>
 
-              {/* Productos en carrito */}
-              {productosVenta.length > 0 && (
-                <div className="space-y-2 mb-3">
-                  {productosVenta.map((item, idx) => {
-                    const producto = products.find(
-                      (p) => p.id === item.productoId
-                    );
-                    return (
-                      <div
-                        key={idx}
-                        className="flex gap-2 items-center bg-white p-2 rounded border"
-                      >
-                        <div className="flex-1">
-                          <p className="font-semibold text-sm">
-                            {producto?.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            ${producto?.price.toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              if (item.cantidad > 1) {
-                                const newItems = [...productosVenta];
-                                newItems[idx].cantidad--;
-                                setProductosVenta(newItems);
-                              }
-                            }}
-                          >
-                            −
-                          </Button>
-                          <span className="w-6 text-center font-semibold">
-                            {item.cantidad}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              if (item.cantidad < (producto?.quantity || 999)) {
-                                const newItems = [...productosVenta];
-                                newItems[idx].cantidad++;
-                                setProductosVenta(newItems);
-                              }
-                            }}
-                          >
-                            +
-                          </Button>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            setProductosVenta(
-                              productosVenta.filter((_, i) => i !== idx)
-                            )
-                          }
-                        >
-                          <X className="h-4 w-4 text-red-600" />
-                        </Button>
-                      </div>
-                    );
-                  })}
-
-                  {/* Total */}
-                  <div className="bg-white p-3 rounded border-2 border-emerald-400 flex justify-between items-center">
-                    <span className="font-bold">TOTAL:</span>
-                    <span className="text-2xl font-bold text-emerald-600">
-                      ${calcularTotalVenta().toLocaleString()}
-                    </span>
+                  {/* Buscador rápido */}
+                  <div className="relative mb-3">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      autoFocus
+                      placeholder="Buscar producto..."
+                      value={productSearchTerm}
+                      onChange={(e) => setProductSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
                   </div>
 
-                  {/* Botones */}
-                  <Button
-                    onClick={handleRegistrarVenta}
-                    disabled={isLoading}
-                    className="w-full"
-                  >
-                    <Check className="h-4 w-4 mr-2" />
-                    Registrar Venta
-                  </Button>
-                </div>
+                  {/* Productos sugeridos */}
+                  {productSearchTerm && filteredProducts.length > 0 && (
+                    <div className="mb-3 max-h-40 overflow-y-auto bg-white rounded border">
+                      {filteredProducts.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => {
+                            agregarProductoRapido(p.id);
+                            setProductSearchTerm("");
+                          }}
+                          className="w-full p-2 hover:bg-emerald-100 text-left border-b last:border-b-0 transition-colors"
+                        >
+                          <div className="flex justify-between">
+                            <div>
+                              <p className="font-semibold text-sm">{p.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Stock: {p.quantity}
+                              </p>
+                            </div>
+                            <p className="font-bold text-emerald-600">
+                              ${p.price.toLocaleString()}
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Productos en carrito */}
+                  {productosVenta.length > 0 && (
+                    <div className="space-y-2 mb-3">
+                      {productosVenta.map((item, idx) => {
+                        const producto = products.find(
+                          (p) => p.id === item.productoId
+                        );
+                        return (
+                          <div
+                            key={idx}
+                            className="flex gap-2 items-center bg-white p-2 rounded border"
+                          >
+                            <div className="flex-1">
+                              <p className="font-semibold text-sm">
+                                {producto?.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                ${producto?.price.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  if (item.cantidad > 1) {
+                                    const newItems = [...productosVenta];
+                                    newItems[idx].cantidad--;
+                                    setProductosVenta(newItems);
+                                  }
+                                }}
+                              >
+                                −
+                              </Button>
+                              <span className="w-6 text-center font-semibold">
+                                {item.cantidad}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  if (
+                                    item.cantidad < (producto?.quantity || 999)
+                                  ) {
+                                    const newItems = [...productosVenta];
+                                    newItems[idx].cantidad++;
+                                    setProductosVenta(newItems);
+                                  }
+                                }}
+                              >
+                                +
+                              </Button>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setProductosVenta(
+                                  productosVenta.filter((_, i) => i !== idx)
+                                )
+                              }
+                            >
+                              <X className="h-4 w-4 text-red-600" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+
+                      {/* Total */}
+                      <div className="bg-white p-3 rounded border-2 border-emerald-400 flex justify-between items-center">
+                        <span className="font-bold">TOTAL:</span>
+                        <span className="text-2xl font-bold text-emerald-600">
+                          ${calcularTotalVenta().toLocaleString()}
+                        </span>
+                      </div>
+
+                      {/* Botón Registrar Venta */}
+                      <Button
+                        onClick={handleRegistrarVenta}
+                        disabled={isLoading}
+                        className="w-full"
+                      >
+                        <Check className="h-4 w-4 mr-2" />
+                        Registrar Venta
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* TAB: DEUDA MANUAL */}
+              {tipoOperacion === "deuda" && (
+                <>
+                  <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
+                    <DollarSign className="h-5 w-5" />
+                    Agregar Deuda Manual
+                  </h3>
+
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-xs font-bold">Monto</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-lg font-bold text-emerald-600">
+                          $
+                        </span>
+                        <Input
+                          type="number"
+                          placeholder="0"
+                          value={montoDeuda}
+                          onChange={(e) => setMontoDeuda(e.target.value)}
+                          className="pl-8 text-lg font-bold"
+                          min="0"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className="text-xs font-bold">
+                        Concepto (opcional)
+                      </Label>
+                      <Input
+                        placeholder="Ej: Servicio técnico, reparación, etc."
+                        value={conceptoDeuda}
+                        onChange={(e) => setConceptoDeuda(e.target.value)}
+                      />
+                    </div>
+
+                    <Button
+                      onClick={async () => {
+                        if (!onAddDeudaDirecta) {
+                          alert("Función no disponible");
+                          return;
+                        }
+                        const monto = parseFloat(montoDeuda);
+                        if (isNaN(monto) || monto <= 0) {
+                          alert("Ingresa un monto válido mayor a 0");
+                          return;
+                        }
+                        setIsLoading(true);
+                        try {
+                          await onAddDeudaDirecta(
+                            selectedCliente.id,
+                            monto,
+                            conceptoDeuda || "Deuda manual"
+                          );
+                          setMontoDeuda("");
+                          setConceptoDeuda("");
+                          setActiveTab("pagar");
+                          setTipoOperacion("productos");
+
+                          // 💡 ESTA LÍNEA RECARGA TODO EL SITIO
+                          window.location.reload();
+
+                        } catch (err) {
+                          alert(
+                            `Error: ${
+                              err instanceof Error
+                                ? err.message
+                                : "Error desconocido"
+                            }`
+                          );
+                        } finally {
+                          setIsLoading(false);
+                        }
+                      }}
+                      disabled={
+                        isLoading || !montoDeuda || parseFloat(montoDeuda) <= 0
+                      }
+                      className="w-full"
+                    >
+                      <Check className="h-4 w-4 mr-2" />
+                      {isLoading ? "Registrando..." : "Registrar Deuda"}
+                    </Button>
+                  </div>
+                </>
               )}
             </Card>
 
@@ -720,13 +872,11 @@ export function ClientesVentasManager({
             {/* TAB: HISTORIAL */}
             {activeTab === "historial" && (
               <div className="space-y-3">
-                {/* ✅ Combinar ventas y pagos, ordenados por fecha */}
                 {(() => {
                   const clientePagos = pagos.filter(
                     (p) => p.cliente_id === selectedCliente.id
                   );
 
-                  // Crear array combinado de ventas y pagos
                   const historialCombinado = [
                     ...todasVentas.map((v) => ({
                       tipo: "venta",
@@ -937,11 +1087,12 @@ export function ClientesVentasManager({
             <div className="flex gap-1">
               <Button
                 onClick={handleAddCliente}
-                disabled={isLoading || !formCliente.nombre || !formCliente.cuit}
+                disabled={isLoading || !formCliente.nombre.trim()}
                 className="flex-1"
               >
                 Guardar
               </Button>
+
               <Button
                 variant="outline"
                 onClick={() => setShowAddClienteForm(false)}
