@@ -216,7 +216,6 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
     });
   };
 
-
   const handleAddProduct = async (
     productData: Omit<Product, "id" | "createdAt" | "updatedAt">
   ) => {
@@ -552,24 +551,23 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
             )}
           </div>
         );
-        case "clientes":
+      case "clientes":
         function deleteCliente(clienteId: number): Promise<boolean> {
           throw new Error("Function not implemented.");
         }
 
-          return (
-            <ClientesVentasManager
-              clientes={clientesVentas}
-              ventasFiado={ventasFiado}
-              products={products}
-              pagos={pagos}  
-              onAddVentaFiado={addVentaFiado}
-              onMarcarPagados={marcarProductosPagados}
-              onDeleteCliente={deleteCliente}
-              onRegistrarPagoParcial={registrarPagoParcial}
-            />
-          );
-        
+        return (
+          <ClientesVentasManager
+            clientes={clientesVentas}
+            ventasFiado={ventasFiado}
+            products={products}
+            pagos={pagos}
+            onAddVentaFiado={addVentaFiado}
+            onMarcarPagados={marcarProductosPagados}
+            onDeleteCliente={deleteCliente}
+            onRegistrarPagoParcial={registrarPagoParcial}
+          />
+        );
 
       case "alerts":
         return (
@@ -706,18 +704,30 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
             onSaleProduct={async (
               productId: string,
               quantity: number,
-              reason: string
+              reason: string,
+              precioVendido?: number
             ) => {
               try {
-                await addMovement(productId, "salida", quantity, reason);
+                const producto = products?.find((p) => p.id === productId);
+                const precioFinal = precioVendido || producto?.price || 0;
+
+                // ESTA línea debe pasar el precio
+                await addMovement(
+                  productId,
+                  "salida",
+                  quantity,
+                  reason,
+                  precioFinal // Debe estar este quinto parámetro
+                );
+
                 toast({
-                  title: "💰 Venta registrada",
-                  description: `Se vendieron ${quantity} unidades correctamente`,
+                  title: "Venta registrada",
+                  description: `Se vendieron ${quantity} unidades a $${precioFinal.toLocaleString()}`,
                   duration: 3000,
                 });
               } catch (error) {
                 toast({
-                  title: "❌ Error en la venta",
+                  title: "Error en la venta",
                   description: "No se pudo procesar la venta",
                   variant: "destructive",
                 });

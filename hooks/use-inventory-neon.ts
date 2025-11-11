@@ -703,41 +703,45 @@ export function useInventoryNeon() {
     productId: string,
     type: "entrada" | "salida",
     quantity: number,
-    reason: string
+    reason: string,
+    price?: number
   ) => {
     try {
       setError(null);
-
+  
       if (connectionStatus === "offline") {
         throw new Error(
           "No hay conexión a la base de datos. Funcionalidad limitada en modo offline."
         );
       }
-
+  
       if (!reason.trim()) {
         throw new Error("El motivo del movimiento es obligatorio");
       }
-
+  
       const producto = await sql`
         SELECT stock_actual, precio_venta 
         FROM productos 
         WHERE id = ${productId}
       `;
-
+  
       if (producto.length === 0) {
         throw new Error("Producto no encontrado");
       }
-
+  
       const stockAntes = producto[0].stock_actual;
       const stockDespues =
         type === "entrada" ? stockAntes + quantity : stockAntes - quantity;
-
+  
       if (type === "salida" && stockDespues < 0) {
         throw new Error(
           `Stock insuficiente. Disponible: ${stockAntes}, Solicitado: ${quantity}`
         );
       }
-
+  
+      const precioFinal = price !== undefined ? price : producto[0].precio_venta;
+      const valorTotal = precioFinal * quantity;
+  
       await sql`
         INSERT INTO movimientos (
           producto_id, fecha, tipo, cantidad, motivo, 
@@ -746,16 +750,16 @@ export function useInventoryNeon() {
           ${productId}, ${new Date().toISOString().split("T")[0]}, 
           ${type === "entrada" ? "Entrada" : "Salida"}, ${quantity}, 
           ${reason.trim()}, ${stockAntes}, ${stockDespues}, 
-          ${producto[0].precio_venta * quantity}
+          ${valorTotal}
         )
       `;
-
+  
       await sql`
         UPDATE productos 
         SET stock_actual = ${stockDespues} 
         WHERE id = ${productId}
       `;
-
+  
       await loadAllData();
       return true;
     } catch (err) {
@@ -765,6 +769,7 @@ export function useInventoryNeon() {
       throw new Error(errorMessage);
     }
   };
+  
 
   const updatePricesByCategory = async (
     category: string,

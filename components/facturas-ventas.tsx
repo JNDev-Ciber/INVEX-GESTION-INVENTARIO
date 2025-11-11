@@ -85,7 +85,8 @@ interface Props {
   onSaleProduct: (
     productId: string,
     quantity: number,
-    reason: string
+    reason: string,
+    precioVendido?: number
   ) => Promise<void>;
   onAddVentaFiado?: (
     clienteId: number,
@@ -566,7 +567,7 @@ export default function FacturaVentaForm({
   const procesarFacturaVenta = async () => {
     if (!facturaActual.cliente.nombre.trim()) {
       toast({
-        title: "❌ Error",
+        title: "Error",
         description: "El nombre del cliente es obligatorio",
         variant: "destructive",
       });
@@ -575,7 +576,7 @@ export default function FacturaVentaForm({
 
     if (facturaActual.items.length === 0) {
       toast({
-        title: "❌ Error",
+        title: "Error",
         description: "Agrega al menos un producto a la factura",
         variant: "destructive",
       });
@@ -583,12 +584,13 @@ export default function FacturaVentaForm({
     }
 
     try {
-      // ✅ DESCONTAR STOCK Y REGISTRAR MOVIMIENTOS DE SALIDA
+      // DESCONTAR STOCK Y REGISTRAR MOVIMIENTOS DE SALIDA
       for (const item of facturaActual.items) {
         await onSaleProduct(
           item.producto.id,
           item.cantidad,
-          `Venta - Factura ${facturaActual.numero}`
+          `Venta - Factura ${facturaActual.numero}`,
+          item.precioUnitario // ⬅️ PASAR EL PRECIO REAL DE VENTA
         );
       }
 
@@ -600,13 +602,13 @@ export default function FacturaVentaForm({
       setMostrarVistaPrevia(true);
 
       toast({
-        title: "💰 Factura de venta procesada",
+        title: "Factura de venta procesada",
         description: `Factura ${factura.numero} registrada y stock actualizado`,
         duration: 3000,
       });
     } catch (error) {
       toast({
-        title: "❌ Error al procesar",
+        title: "Error al procesar",
         description: "No se pudo procesar la venta",
         variant: "destructive",
       });
@@ -1199,18 +1201,20 @@ export default function FacturaVentaForm({
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {/* Lista de items */}
+              {/* Lista de items EDITABLES */}
               <div className="space-y-2">
                 {facturaActual.items.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between p-3 border rounded-lg bg-gray-50"
+                    className="flex items-center justify-between p-3 border rounded-lg bg-gray-50 gap-4"
                   >
-                    <div className="flex-1">
-                      <div className="font-medium">{item.producto.name}</div>
+                    {/* Información del producto */}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">
+                        {item.producto.name}
+                      </div>
                       <div className="text-sm text-muted-foreground">
-                        Código: {item.producto.code} | Cantidad: {item.cantidad}{" "}
-                        | Precio: ${item.precioUnitario.toLocaleString()}
+                        Código: {item.producto.code}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <Badge variant="outline" className="text-xs">
@@ -1218,12 +1222,132 @@ export default function FacturaVentaForm({
                         </Badge>
                         <Badge variant="secondary" className="text-xs">
                           <TrendingDown className="h-3 w-3 mr-1" />
-                          Stock: -{item.cantidad}
+                          Stock: {item.producto.quantity} disponibles
                         </Badge>
                       </div>
                     </div>
+
+                    {/* INPUTS EDITABLES - Cantidad */}
+                    <div className="flex flex-col gap-1 w-24">
+                      <Label
+                        htmlFor={`cantidad-${item.id}`}
+                        className="text-xs"
+                      >
+                        Cantidad
+                      </Label>
+                      <Input
+                        id={`cantidad-${item.id}`}
+                        type="text"
+                        value={item.cantidad}
+                        onChange={(e) => {
+                          const valor = e.target.value;
+                          const nuevaCantidad = parseFloat(valor);
+
+                          // Permitir vacío temporalmente para poder borrar
+                          if (valor === "") {
+                            setFacturaActual((prev) => ({
+                              ...prev,
+                              items: prev.items.map((i) =>
+                                i.id === item.id
+                                  ? {
+                                      ...i,
+                                      cantidad: 0,
+                                      subtotal: 0,
+                                    }
+                                  : i
+                              ),
+                            }));
+                            return;
+                          }
+
+                          // Validar que sea un número válido
+                          if (isNaN(nuevaCantidad) || nuevaCantidad < 0) {
+                            return;
+                          }
+
+                          // Validar stock
+                          if (nuevaCantidad > item.producto.quantity) {
+                            toast({
+                              title: "Stock insuficiente",
+                              description: `Solo hay ${item.producto.quantity} unidades`,
+                              variant: "destructive",
+                              duration: 2000,
+                            });
+                            return;
+                          }
+
+                          setFacturaActual((prev) => ({
+                            ...prev,
+                            items: prev.items.map((i) =>
+                              i.id === item.id
+                                ? {
+                                    ...i,
+                                    cantidad: nuevaCantidad,
+                                    subtotal: nuevaCantidad * i.precioUnitario,
+                                  }
+                                : i
+                            ),
+                          }));
+                        }}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+
+                    {/* INPUTS EDITABLES - Precio */}
+                    <div className="flex flex-col gap-1 w-28">
+                      <Label htmlFor={`precio-${item.id}`} className="text-xs">
+                        Precio Unit.
+                      </Label>
+                      <Input
+                        id={`precio-${item.id}`}
+                        type="text"
+                        value={item.precioUnitario}
+                        onChange={(e) => {
+                          const valor = e.target.value;
+                          const nuevoPrecio = parseFloat(valor);
+
+                          // Permitir vacío temporalmente
+                          if (valor === "") {
+                            setFacturaActual((prev) => ({
+                              ...prev,
+                              items: prev.items.map((i) =>
+                                i.id === item.id
+                                  ? {
+                                      ...i,
+                                      precioUnitario: 0,
+                                      subtotal: 0,
+                                    }
+                                  : i
+                              ),
+                            }));
+                            return;
+                          }
+
+                          // Validar que sea un número válido
+                          if (isNaN(nuevoPrecio) || nuevoPrecio < 0) {
+                            return;
+                          }
+
+                          setFacturaActual((prev) => ({
+                            ...prev,
+                            items: prev.items.map((i) =>
+                              i.id === item.id
+                                ? {
+                                    ...i,
+                                    precioUnitario: nuevoPrecio,
+                                    subtotal: i.cantidad * nuevoPrecio,
+                                  }
+                                : i
+                            ),
+                          }));
+                        }}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+
+                    {/* Subtotal y botón eliminar */}
                     <div className="flex items-center gap-3">
-                      <span className="font-bold text-blue-600">
+                      <span className="font-bold text-blue-600 min-w-[80px] text-right">
                         ${item.subtotal.toLocaleString()}
                       </span>
                       <Button
@@ -1245,16 +1369,16 @@ export default function FacturaVentaForm({
               <div className="bg-blue-50 p-4 rounded-lg">
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <span>Subtotal:</span>
+                    <span>Subtotal</span>
                     <span>${facturaActual.subtotal.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>IVA ({porcentajeIva}%):</span>
+                    <span>IVA ({porcentajeIva}%)</span>
                     <span>${facturaActual.iva.toLocaleString()}</span>
                   </div>
                   <Separator />
                   <div className="flex justify-between text-lg font-bold text-blue-600">
-                    <span>TOTAL:</span>
+                    <span>TOTAL</span>
                     <span>${facturaActual.total.toLocaleString()}</span>
                   </div>
                 </div>

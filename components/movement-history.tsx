@@ -18,6 +18,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { ResponsiveTable } from "./responsive-table";
 import type { Movement, Product } from "../types/inventory";
 import { exportMovementsReport } from "../lib/export-utils";
@@ -31,6 +37,7 @@ import {
   TrendingUp,
   Trash2,
   AlertTriangle,
+  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -44,11 +51,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 
 interface MovementHistoryProps {
   movements: Movement[];
   products: Product[];
-  onClearMovements?: () => Promise<void>; // Nueva prop para limpiar movimientos
+  onClearMovements?: () => Promise<void>;
 }
 
 export function MovementHistory({
@@ -60,8 +69,9 @@ export function MovementHistory({
   const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
   const [typeFilter, setTypeFilter] = useState("all");
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
-  // Obtener mes actual en formato YYYY-MM
   const getCurrentMonth = () => {
     const now = new Date();
     return `${now.getFullYear()}-${(now.getMonth() + 1)
@@ -69,12 +79,10 @@ export function MovementHistory({
       .padStart(2, "0")}`;
   };
 
-  const [monthFilter, setMonthFilter] = useState(getCurrentMonth()); // Por defecto mes actual
-
+  const [monthFilter, setMonthFilter] = useState(getCurrentMonth());
   const [isMobile, setIsMobile] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
 
-  // Evitar hidratación incorrecta y detectar móvil
   useEffect(() => {
     setMounted(true);
     const checkMobile = () => {
@@ -88,7 +96,6 @@ export function MovementHistory({
 
   const isDark = mounted && (resolvedTheme === "dark" || theme === "dark");
 
-  // Obtener meses únicos de los movimientos
   const getAvailableMonths = () => {
     const months = movements.map((movement) => {
       const date = new Date(movement.date);
@@ -103,7 +110,6 @@ export function MovementHistory({
       };
     });
 
-    // Eliminar duplicados y ordenar
     const uniqueMonths = months
       .filter(
         (month, index, self) =>
@@ -120,6 +126,18 @@ export function MovementHistory({
     .filter((movement) => {
       const typeMatch = typeFilter === "all" || movement.type === typeFilter;
 
+      // Filtro por fecha específica (día)
+      if (selectedDate) {
+        const movementDate = new Date(movement.date);
+        const isSameDay =
+          movementDate.getDate() === selectedDate.getDate() &&
+          movementDate.getMonth() === selectedDate.getMonth() &&
+          movementDate.getFullYear() === selectedDate.getFullYear();
+
+        return typeMatch && isSameDay;
+      }
+
+      // Filtro por mes
       if (monthFilter === "all") return typeMatch;
 
       const movementMonth = new Date(movement.date);
@@ -133,7 +151,6 @@ export function MovementHistory({
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  // Función para limpiar movimientos
   const handleClearMovements = async () => {
     if (!onClearMovements) {
       toast({
@@ -167,7 +184,6 @@ export function MovementHistory({
     }
   };
 
-  // Calcular estadísticas
   const totalEntradas = filteredMovements.filter(
     (m) => m.type === "entrada"
   ).length;
@@ -177,7 +193,6 @@ export function MovementHistory({
   const valorTotalEntradas = filteredMovements
     .filter((m) => m.type === "entrada")
     .reduce((sum, m) => {
-      // ✅ Usar valor_total si existe, sino calcular
       const value =
         m.valor_total ||
         (() => {
@@ -190,7 +205,6 @@ export function MovementHistory({
   const valorTotalSalidas = filteredMovements
     .filter((m) => m.type === "salida")
     .reduce((sum, m) => {
-      // ✅ Usar valor_total si existe, sino calcular
       const value =
         m.valor_total ||
         (() => {
@@ -229,8 +243,6 @@ export function MovementHistory({
       label: "Producto",
       render: (_: any, movement: Movement) => {
         const product = products.find((p) => p.id === movement.productId);
-
-        // ✅ Solo usar reason cuando NO hay producto_id
         const displayName =
           movement.productId === null
             ? movement.reason || "💵 Pago de cliente"
@@ -258,7 +270,6 @@ export function MovementHistory({
         );
       },
     },
-
     {
       key: "type",
       label: "Tipo",
@@ -326,7 +337,6 @@ export function MovementHistory({
       key: "value",
       label: "Valor",
       render: (_: any, movement: Movement) => {
-        // ✅ Usar valor_total de la BD si existe, sino calcular
         const value =
           movement.valor_total ||
           (() => {
@@ -353,7 +363,6 @@ export function MovementHistory({
     },
   ];
 
-  // Componente de Card para vista móvil
   const MovementCard = ({ movement }: { movement: Movement }) => {
     const product = products.find((p) => p.id === movement.productId);
     const value =
@@ -369,7 +378,6 @@ export function MovementHistory({
         }`}
       >
         <CardContent className="p-4">
-          {/* Header del movimiento */}
           <div className="flex justify-between items-start mb-3">
             <div className="flex-1">
               <h3
@@ -379,7 +387,6 @@ export function MovementHistory({
               >
                 {displayName}
               </h3>
-
               <p
                 className={`text-sm ${
                   isDark ? "text-gray-400" : "text-gray-500"
@@ -409,7 +416,6 @@ export function MovementHistory({
             </Badge>
           </div>
 
-          {/* Información del movimiento */}
           <div className="grid grid-cols-2 gap-4 mb-3">
             <div>
               <p
@@ -483,7 +489,6 @@ export function MovementHistory({
             </div>
           </div>
 
-          {/* Motivo */}
           <div>
             <p
               className={`text-xs ${
@@ -505,7 +510,6 @@ export function MovementHistory({
     );
   };
 
-  // No renderizar hasta que esté montado
   if (!mounted) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -526,7 +530,6 @@ export function MovementHistory({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {/* Controles responsive mejorados */}
         <div className="flex flex-col gap-4 mb-6">
           {/* Primera fila: Filtros */}
           <div className="flex flex-col sm:flex-row gap-3">
@@ -541,7 +544,6 @@ export function MovementHistory({
               </SelectContent>
             </Select>
 
-            {/* Nuevo filtro por mes */}
             <Select value={monthFilter} onValueChange={setMonthFilter}>
               <SelectTrigger className="w-full sm:w-48">
                 <SelectValue placeholder="Filtrar por mes" />
@@ -558,13 +560,58 @@ export function MovementHistory({
                 ))}
               </SelectContent>
             </Select>
+
+            {/* Nuevo DatePicker */}
+            <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={`w-full sm:w-64 justify-start text-left font-normal ${
+                    !selectedDate && "text-muted-foreground"
+                  }`}
+                >
+                  <Calendar className="mr-2 h-4 w-4" />
+                  {selectedDate ? (
+                    format(selectedDate, "PPP", { locale: es })
+                  ) : (
+                    <span>Filtrar por día</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => {
+                    setSelectedDate(date);
+                    setDatePickerOpen(false);
+                    if (date) {
+                      setMonthFilter("all");
+                    }
+                  }}
+                  locale={es}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+
+            {/* Botón para limpiar filtro de fecha */}
+            {selectedDate && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedDate(undefined)}
+                className="shrink-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
           </div>
 
           {/* Segunda fila: Botones de acción */}
           <div className="flex flex-col sm:flex-row gap-3">
             <Button
               onClick={() => {
-                // Preparar datos para exportar con información completa
                 const movementsWithProductInfo = filteredMovements.map(
                   (movement) => {
                     const product = products.find(
@@ -599,7 +646,6 @@ export function MovementHistory({
               <span className="sm:hidden">Exportar</span>
             </Button>
 
-            {/* Botón para limpiar movimientos */}
             {onClearMovements && movements.length > 0 && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -652,7 +698,7 @@ export function MovementHistory({
           </div>
         </div>
 
-        {/* Resumen de movimientos responsive */}
+        {/* Resumen de movimientos */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div
             className={`p-4 rounded-lg border transition-colors ${
@@ -794,10 +840,8 @@ export function MovementHistory({
           </div>
         </div>
 
-        {/* Vista condicional: Cards para móvil, tabla para desktop */}
         {filteredMovements.length > 0 ? (
           isMobile ? (
-            /* Vista de Cards para móvil */
             <div className="space-y-4">
               {filteredMovements.map((movement, index) => (
                 <MovementCard
@@ -807,7 +851,6 @@ export function MovementHistory({
               ))}
             </div>
           ) : (
-            /* Vista de Tabla para desktop */
             <ResponsiveTable data={filteredMovements} columns={columns} />
           )
         ) : (
@@ -818,7 +861,9 @@ export function MovementHistory({
           >
             <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>No hay movimientos registrados.</p>
-            {(typeFilter !== "all" || monthFilter !== "all") && (
+            {(typeFilter !== "all" ||
+              monthFilter !== "all" ||
+              selectedDate) && (
               <p className="text-sm mt-2">
                 Intenta cambiar los filtros para ver más movimientos.
               </p>
