@@ -416,14 +416,16 @@ export function useInventoryNeon() {
       setError(null);
       if (connectionStatus === "offline")
         throw new Error("No hay conexión a la base de datos.");
-
-      await sql`
+  
+      const result = await sql`
         INSERT INTO clientes_ventas (nombre, cuit, telefono)
-        VALUES (${nombre}, ${cuit}, ${telefono})
+        VALUES (${nombre}, ${cuit ? cuit : null}, ${telefono})
+        RETURNING id, nombre, cuit, telefono, direccion, email, saldo_pendiente
       `;
-
+  
       await loadAllData();
-      return true;
+  
+      return result[0];
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Error al agregar cliente";
@@ -431,7 +433,7 @@ export function useInventoryNeon() {
       throw new Error(errorMessage);
     }
   };
-
+  
   const addDeudaDirecta = async (
     clienteId: number,
     monto: number,
@@ -439,48 +441,52 @@ export function useInventoryNeon() {
   ): Promise<boolean> => {
     try {
       setError(null);
-      
+
       if (connectionStatus === "offline") {
         throw new Error("No hay conexión a la base de datos.");
       }
-  
+
       if (monto <= 0) {
         throw new Error("El monto debe ser mayor a 0");
       }
-  
+
       const today = new Date().toISOString().split("T")[0];
-  
-      console.log(`💰 Registrando deuda manual de $${monto} para cliente ${clienteId}`);
-  
+
+      console.log(
+        `💰 Registrando deuda manual de $${monto} para cliente ${clienteId}`
+      );
+
       // Crear una venta sin productos
       const ventaResult = await sql`
         INSERT INTO ventas_fiado (cliente_id, total, saldo_pendiente)
         VALUES (${clienteId}, ${monto}, ${monto})
         RETURNING id
       `;
-  
+
       const ventaId = ventaResult[0].id;
-  
+
       // Insertar un detalle especial para la deuda manual
       await sql`
         INSERT INTO ventas_fiado_detalle 
         (venta_fiado_id, producto_id, producto_nombre, cantidad, precio_unitario, subtotal)
-        VALUES (${ventaId}, NULL, ${concepto || "Deuda manual"}, 1, ${monto}, ${monto})
+        VALUES (${ventaId}, NULL, ${
+        concepto || "Deuda manual"
+      }, 1, ${monto}, ${monto})
       `;
-  
+
       // Actualizar saldo del cliente
       await sql`
         UPDATE clientes_ventas 
         SET saldo_pendiente = saldo_pendiente + ${monto}
         WHERE id = ${clienteId}
       `;
-  
+
       // Obtener nombre del cliente para el movimiento
       const clienteData = await sql`
         SELECT nombre FROM clientes_ventas WHERE id = ${clienteId}
       `;
       const clienteNombre = clienteData[0]?.nombre || `Cliente ${clienteId}`;
-  
+
       // Registrar movimiento
       await sql`
         INSERT INTO movimientos (
@@ -497,9 +503,9 @@ export function useInventoryNeon() {
           ${monto}
         )
       `;
-  
+
       console.log("✅ Deuda manual registrada exitosamente");
-  
+
       await loadAllData();
       return true;
     } catch (err) {
@@ -510,8 +516,6 @@ export function useInventoryNeon() {
       throw new Error(errorMessage);
     }
   };
-  
-  
 
   const updateProduct = async (id: string, updates: any) => {
     try {
@@ -789,40 +793,41 @@ export function useInventoryNeon() {
   ) => {
     try {
       setError(null);
-  
+
       if (connectionStatus === "offline") {
         throw new Error(
           "No hay conexión a la base de datos. Funcionalidad limitada en modo offline."
         );
       }
-  
+
       if (!reason.trim()) {
         throw new Error("El motivo del movimiento es obligatorio");
       }
-  
+
       const producto = await sql`
         SELECT stock_actual, precio_venta 
         FROM productos 
         WHERE id = ${productId}
       `;
-  
+
       if (producto.length === 0) {
         throw new Error("Producto no encontrado");
       }
-  
+
       const stockAntes = producto[0].stock_actual;
       const stockDespues =
         type === "entrada" ? stockAntes + quantity : stockAntes - quantity;
-  
+
       if (type === "salida" && stockDespues < 0) {
         throw new Error(
           `Stock insuficiente. Disponible: ${stockAntes}, Solicitado: ${quantity}`
         );
       }
-  
-      const precioFinal = price !== undefined ? price : producto[0].precio_venta;
+
+      const precioFinal =
+        price !== undefined ? price : producto[0].precio_venta;
       const valorTotal = precioFinal * quantity;
-  
+
       await sql`
         INSERT INTO movimientos (
           producto_id, fecha, tipo, cantidad, motivo, 
@@ -834,13 +839,13 @@ export function useInventoryNeon() {
           ${valorTotal}
         )
       `;
-  
+
       await sql`
         UPDATE productos 
         SET stock_actual = ${stockDespues} 
         WHERE id = ${productId}
       `;
-  
+
       await loadAllData();
       return true;
     } catch (err) {
@@ -850,7 +855,6 @@ export function useInventoryNeon() {
       throw new Error(errorMessage);
     }
   };
-  
 
   const updatePricesByCategory = async (
     category: string,
@@ -1273,6 +1277,5 @@ export function useInventoryNeon() {
     addDeudaDirecta,
     refreshData: loadAllData,
     retryConnection: initializeConnection,
-   
   };
 }

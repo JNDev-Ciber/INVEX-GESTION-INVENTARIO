@@ -704,6 +704,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
             products={products}
             clientes={clientesVentas}
             onAddVentaFiado={addVentaFiado}
+            addCliente={addCliente}
             onSaleProduct={async (
               productId: string,
               quantity: number,
@@ -737,6 +738,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
                 throw error;
               }
             }}
+            
           />
         );
 

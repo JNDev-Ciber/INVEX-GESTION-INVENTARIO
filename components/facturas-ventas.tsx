@@ -92,6 +92,11 @@ interface Props {
     clienteId: number,
     productos: any[]
   ) => Promise<{ success: boolean; ventaId: any; total: number }>;
+  addCliente: (
+    nombre: string,
+    cuit: string,
+    telefono: string
+  ) => Promise<ClienteVenta | undefined>;
 }
 
 export default function FacturaVentaForm({
@@ -99,6 +104,7 @@ export default function FacturaVentaForm({
   clientes = [],
   onAddVentaFiado,
   onSaleProduct,
+  addCliente,
 }: Props) {
   const { toast } = useToast();
   const [showClienteDropdown, setShowClienteDropdown] = useState(false);
@@ -212,105 +218,6 @@ export default function FacturaVentaForm({
   });
 
   const [isLoading, setIsLoading] = useState(false);
-
-  const handleDejarAFiado = async () => {
-    if (!facturaActual.cliente.nombre.trim()) {
-      toast({
-        title: "❌ Error",
-        description: "El nombre del cliente es obligatorio",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (facturaActual.items.length === 0) {
-      toast({
-        title: "❌ Error",
-        description: "Agrega al menos un producto",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-
-      // 1. Convertir items al formato correcto
-      const productosVenta = facturaActual.items.map((item) => ({
-        productoId: item.producto.id,
-        cantidad: item.cantidad,
-      }));
-
-      // 2. Buscar el cliente en la BD
-      const clienteEnBD = clientes.find(
-        (c) => c.cuit === facturaActual.cliente.cuit
-      );
-
-      if (!clienteEnBD) {
-        toast({
-          title: "❌ Error",
-          description: "Cliente no encontrado en la base de datos",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // 3. Validar que onAddVentaFiado existe
-      if (!onAddVentaFiado) {
-        toast({
-          title: "❌ Error",
-          description: "Función de venta no disponible",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // 4. Llamar la función para registrar venta a fiado
-      const resultado = await onAddVentaFiado(clienteEnBD.id, productosVenta);
-
-      console.log("✅ Venta registrada:", resultado); // Debug
-
-      // 5. Limpiar todo después de registrar exitosamente
-      setFacturaActual({
-        id: "",
-        numero: generarNumeroFactura(),
-        fecha: new Date().toISOString().split("T")[0],
-        cliente: {
-          nombre: "",
-          cuit: "",
-          direccion: "",
-          telefono: "",
-          email: "",
-        },
-        items: [],
-        subtotal: 0,
-        iva: 0,
-        total: 0,
-        observaciones: "",
-      });
-      setSearchClienteTerm("");
-
-      toast({
-        title: "✅ Venta a cuenta corriente registrada",
-        description: `$${facturaActual.total.toLocaleString()} dejada a cuenta para ${
-          clienteEnBD.nombre
-        }`,
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error("❌ Error en venta fiado:", error); // Debug
-      toast({
-        title: "❌ Error al procesar",
-        description:
-          error instanceof Error
-            ? error.message
-            : "No se pudo registrar la venta",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const [porcentajeIva, setPorcentajeIva] = useState(0);
   const [busquedaProducto, setBusquedaProducto] = useState("");
@@ -584,13 +491,34 @@ export default function FacturaVentaForm({
     }
 
     try {
-      // DESCONTAR STOCK Y REGISTRAR MOVIMIENTOS DE SALIDA
+      // Buscar cliente por cuit en el array de clientes actual
+      let clienteEnBD = clientes.find(
+        (c) => c.cuit === facturaActual.cliente.cuit
+      );
+
+      // Si no existe, crear y usar el retornado por addCliente
+      if (!clienteEnBD) {
+        clienteEnBD = await addCliente(
+          facturaActual.cliente.nombre,
+          facturaActual.cliente.cuit,
+          facturaActual.cliente.telefono || ""
+        );
+        if (!clienteEnBD || !clienteEnBD.id) {
+          toast({
+            title: "Error",
+            description: "No se pudo guardar el cliente",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
       for (const item of facturaActual.items) {
         await onSaleProduct(
           item.producto.id,
           item.cantidad,
           `Venta - Factura ${facturaActual.numero}`,
-          item.precioUnitario // ⬅️ PASAR EL PRECIO REAL DE VENTA
+          item.precioUnitario
         );
       }
 
@@ -606,12 +534,144 @@ export default function FacturaVentaForm({
         description: `Factura ${factura.numero} registrada y stock actualizado`,
         duration: 3000,
       });
+
+      setFacturaActual({
+        id: "",
+        numero: generarNumeroFactura(),
+        fecha: new Date().toISOString().split("T")[0],
+        cliente: {
+          nombre: "",
+          cuit: "",
+          direccion: "",
+          telefono: "",
+          email: "",
+        },
+        items: [],
+        subtotal: 0,
+        iva: 0,
+        total: 0,
+        observaciones: "",
+      });
+      setSearchClienteTerm("");
+      setProductoSeleccionado(null);
+      setNuevoItem({ cantidad: "", precioUnitario: "" });
+      setMostrarSelectorProducto(false);
+      setMostrarVistaPrevia(false);
     } catch (error) {
+      console.error("Error al procesar la factura:", error);
       toast({
         title: "Error al procesar",
-        description: "No se pudo procesar la venta",
+        description:
+          error instanceof Error
+            ? error.message
+            : "No se pudo procesar la venta",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleDejarAFiado = async () => {
+    if (!facturaActual.cliente.nombre.trim()) {
+      toast({
+        title: "❌ Error",
+        description: "El nombre del cliente es obligatorio",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (facturaActual.items.length === 0) {
+      toast({
+        title: "❌ Error",
+        description: "Agrega al menos un producto",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      let clienteEnBD = clientes.find(
+        (c) => c.cuit === facturaActual.cliente.cuit
+      );
+
+      if (!clienteEnBD) {
+        clienteEnBD = await addCliente(
+          facturaActual.cliente.nombre,
+          facturaActual.cliente.cuit,
+          facturaActual.cliente.telefono || ""
+        );
+        if (!clienteEnBD || !clienteEnBD.id) {
+          toast({
+            title: "❌ Error",
+            description: "No se pudo guardar el cliente",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      const productosVenta = facturaActual.items.map((item) => ({
+        productoId: item.producto.id,
+        cantidad: item.cantidad,
+      }));
+
+      if (!onAddVentaFiado) {
+        toast({
+          title: "❌ Error",
+          description: "Función de venta no disponible",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      const resultado = await onAddVentaFiado(clienteEnBD.id, productosVenta);
+
+      toast({
+        title: "✅ Venta a cuenta corriente registrada",
+        description: `$${facturaActual.total.toLocaleString()} dejada a cuenta para ${
+          clienteEnBD.nombre
+        }`,
+        duration: 3000,
+      });
+
+      setFacturaActual({
+        id: "",
+        numero: generarNumeroFactura(),
+        fecha: new Date().toISOString().split("T")[0],
+        cliente: {
+          nombre: "",
+          cuit: "",
+          direccion: "",
+          telefono: "",
+          email: "",
+        },
+        items: [],
+        subtotal: 0,
+        iva: 0,
+        total: 0,
+        observaciones: "",
+      });
+      setSearchClienteTerm("");
+      setProductoSeleccionado(null);
+      setNuevoItem({ cantidad: "", precioUnitario: "" });
+      setMostrarSelectorProducto(false);
+      setMostrarVistaPrevia(false);
+    } catch (error) {
+      console.error("❌ Error en venta fiado:", error);
+      toast({
+        title: "❌ Error al procesar",
+        description:
+          error instanceof Error
+            ? error.message
+            : "No se pudo registrar la venta",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1000,7 +1060,7 @@ export default function FacturaVentaForm({
               />
             </div>
             <div>
-              <Label htmlFor="clienteCuit">CUIT/DNI *</Label>
+              <Label htmlFor="clienteCuit">CUIT/DNI</Label>
               <Input
                 id="clienteCuit"
                 value={facturaActual.cliente.cuit}
