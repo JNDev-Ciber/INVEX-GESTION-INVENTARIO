@@ -331,6 +331,7 @@ export function exportInventoryToHTML(products: Product[]): void {
   URL.revokeObjectURL(url);
 }
 
+
 // ✅ EXPORTAR MOVIMIENTOS A EXCEL (CSV COMPATIBLE)
 export function exportMovementsToExcel(movements: Movement[]): void {
   if (!movements || movements.length === 0) {
@@ -351,15 +352,16 @@ export function exportMovementsToExcel(movements: Movement[]): void {
   const data = movements.map(movement => [
     new Date(movement.date).toLocaleDateString("es-ES"),
     movement.type === "entrada" ? "Entrada" : "Salida",
-    movement.productId,
+    movement.productId ?? "N/A",  // ⬅️ Cambiar esto para manejar null
     movement.quantity.toString(),
-    movement.reason || "",
-    (movement.previousQuantity || 0).toString(),
-    (movement.newQuantity || 0).toString()
+    movement.reason ?? "",         // ⬅️ Cambiar || por ?? para ser más explícito
+    (movement.previousQuantity ?? 0).toString(),  // ⬅️ Cambiar || por ??
+    (movement.newQuantity ?? 0).toString()        // ⬅️ Cambiar || por ??
   ]);
 
   exportToCSV(data, headers, `movimientos-electroluxstore-${new Date().toISOString().split('T')[0]}.csv`);
 }
+
 
 // ✅ EXPORTAR VENTAS A EXCEL
 export function exportSalesToExcel(sales: any[]): void {
