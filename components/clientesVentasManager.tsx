@@ -55,6 +55,13 @@ interface ClientesVentasManagerProps {
     clienteId: number,
     monto: number
   ) => Promise<boolean>;
+  onAddMovimiento?: (
+    productId: string | null,
+    type: "entrada" | "salida",
+    quantity: number,
+    reason: string,
+    amount: number
+  ) => Promise<void>;
 }
 
 export function ClientesVentasManager({
@@ -68,6 +75,7 @@ export function ClientesVentasManager({
   onRegistrarPagoParcial,
   onDeleteCliente,
   onAddDeudaDirecta,
+  onAddMovimiento,
 }: ClientesVentasManagerProps) {
   // ✅ TODOS LOS ESTADOS DECLARADOS CORRECTAMENTE
   const [searchTerm, setSearchTerm] = useState("");
@@ -179,8 +187,10 @@ export function ClientesVentasManager({
     console.log("🎯 onAddCliente existe?", !!onAddCliente);
     console.log("🎯 onAddCliente es función?", typeof onAddCliente);
 
-    if (!formCliente.nombre || !formCliente.cuit) {
-      console.warn("⚠️ Validación falló");
+    // ✅ Hacer CUIT opcional - solo validar nombre
+    if (!formCliente.nombre.trim()) {
+      console.warn("⚠️ Validación falló - Nombre es obligatorio");
+      alert("El nombre del cliente es obligatorio");
       return;
     }
 
@@ -195,9 +205,9 @@ export function ClientesVentasManager({
 
     try {
       await onAddCliente(
-        formCliente.nombre,
-        formCliente.cuit,
-        formCliente.telefono
+        formCliente.nombre.trim(),
+        formCliente.cuit.trim(), // Puede estar vacío
+        formCliente.telefono.trim()
       );
       console.log("✅ Cliente agregado exitosamente");
       setShowAddClienteForm(false);
@@ -257,22 +267,44 @@ export function ClientesVentasManager({
     }
   };
 
-  const handleMarcarPagados = async (ventaId: number) => {
-    const detallesSeleccionados = Object.entries(pagoState)
-      .filter(([_, pagado]) => pagado)
-      .map(([detalleId]) => parseInt(detalleId));
-    if (detallesSeleccionados.length === 0) {
-      alert("⚠️ Selecciona al menos un producto");
-      return;
-    }
-    setIsLoading(true);
+  const handleMarcarPagados = async (
+    detallesSeleccionados: number[],
+    ventaId: number
+  ) => {
     try {
       await onMarcarPagados(detallesSeleccionados, ventaId);
-      setPagoState({});
-    } catch (err) {
-      alert(`Error: ${err instanceof Error ? err.message : "Error"}`);
-    } finally {
-      setIsLoading(false);
+
+      const venta = ventasFiado.find((v) => v.id === ventaId);
+
+      if (onAddMovimiento && venta) {
+        const productoValido =
+          products.find(
+            (p) =>
+              p.name.includes("servicio") ||
+              p.name.includes("general") ||
+              p.name.includes("venta")
+          ) || products[0];
+
+        for (const detalleId of detallesSeleccionados) {
+          const detalle = venta.detalles?.find((d) => d.id === detalleId);
+
+          if (detalle) {
+            await onAddMovimiento(
+              productoValido?.id || "default",
+              "entrada", // ✅ Cambiar de "salida" a "entrada"
+              1,
+              `Pago producto fiado #${detalleId}`,
+              detalle.subtotal
+            );
+            console.log(
+              `✅ Movimiento registrado: $${detalle.subtotal} para detalle #${detalleId}`
+            );
+          }
+        }
+      }
+    } catch (error) {
+      console.error(error);
+      throw error;
     }
   };
 
@@ -727,7 +759,6 @@ export function ClientesVentasManager({
 
                           // 💡 ESTA LÍNEA RECARGA TODO EL SITIO
                           window.location.reload();
-
                         } catch (err) {
                           alert(
                             `Error: ${
@@ -852,7 +883,16 @@ export function ClientesVentasManager({
                       </div>
                       {venta.detalles?.some((d) => pagoState[d.id]) && (
                         <Button
-                          onClick={() => handleMarcarPagados(venta.id)}
+                          onClick={() => {
+                            const detallesSeleccionados =
+                              venta.detalles
+                                ?.filter((d) => pagoState[d.id])
+                                .map((d) => d.id) || [];
+                            handleMarcarPagados(
+                              detallesSeleccionados,
+                              venta.id
+                            );
+                          }}
                           disabled={isLoading}
                           className="w-full mt-3"
                         >

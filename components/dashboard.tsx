@@ -282,7 +282,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
   const handleQuickSale = (product: Product) => {
     if (product.quantity > 0) {
       setSelectedProductForMovement(product);
-      setMovementType("salida");
+      setMovementType("entrada");
       setMovementQuantity("1");
       setMovementReason("Venta a cliente");
       setCustomReason("");
@@ -293,7 +293,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
 
   const handleQuickStock = (product: Product) => {
     setSelectedProductForMovement(product);
-    setMovementType("entrada");
+    setMovementType("salida");
     setMovementQuantity("5");
     setMovementReason("Reposición de stock");
     setCustomReason("");
@@ -367,7 +367,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
   };
 
   const predefinedReasons = {
-    entrada: [
+    salida: [
       "Compra a proveedor",
       "Devolución de cliente",
       "Reposición de stock",
@@ -376,7 +376,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
       "Producto en consignación",
       "Recuperación de producto reparado",
     ],
-    salida: [
+    entrada: [
       "Venta a cliente",
       "Venta online",
       "Producto defectuoso/dañado",
@@ -529,6 +529,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
                       items.map((item) => ({
                         productId: item.product.id,
                         quantity: item.quantity,
+                        type: "entrada",
                       }))
                     );
                     toast({
@@ -557,18 +558,51 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
           throw new Error("Function not implemented.");
         }
 
+        // ✅ Wrapper simple para addCliente que adapte el tipo de retorno
+        const handleAddCliente = async (
+          nombre: string,
+          cuit: string,
+          telefono: string
+        ): Promise<boolean> => {
+          try {
+            const result = await addCliente(nombre, cuit, telefono);
+            return !!result; // Convertir cualquier resultado a boolean
+          } catch (error) {
+            console.error("Error en handleAddCliente:", error);
+            return false;
+          }
+        };
+
+        // ✅ Wrapper simple para addMovement que acepte null
+        const handleAddMovimiento = async (
+          productId: string | null,
+          type: "entrada" | "salida",
+          quantity: number,
+          reason: string,
+          amount: number
+        ): Promise<void> => {
+          try {
+            // Si productId es null, usar un ID por defecto
+            const finalProductId = productId || products[0]?.id || "default";
+            await addMovement(finalProductId, type, quantity, reason, amount);
+          } catch (error) {
+            console.error("Error en handleAddMovimiento:", error);
+          }
+        };
+
         return (
           <ClientesVentasManager
             clientes={clientesVentas}
             ventasFiado={ventasFiado}
             products={products}
             pagos={pagos}
-            onAddCliente={addCliente}
+            onAddCliente={handleAddCliente} // ✅ Usar wrapper
             onAddDeudaDirecta={addDeudaDirecta}
             onAddVentaFiado={addVentaFiado}
             onMarcarPagados={marcarProductosPagados}
             onDeleteCliente={deleteCliente}
             onRegistrarPagoParcial={registrarPagoParcial}
+            onAddMovimiento={handleAddMovimiento} // ✅ Usar wrapper
           />
         );
 
@@ -656,7 +690,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
               reason: string
             ) => {
               try {
-                await addMovement(productId, "entrada", quantity, reason);
+                await addMovement(productId, "salida", quantity, reason);
                 toast({
                   title: "📦 Stock agregado",
                   description: `Se agregaron ${quantity} unidades al inventario`,
@@ -718,7 +752,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
                 // ESTA línea debe pasar el precio
                 await addMovement(
                   productId,
-                  "salida",
+                  "entrada",
                   quantity,
                   reason,
                   precioFinal // Debe estar este quinto parámetro
@@ -738,7 +772,6 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
                 throw error;
               }
             }}
-            
           />
         );
 

@@ -982,7 +982,7 @@ export function useInventoryNeon() {
             producto_id, fecha, tipo, cantidad, motivo, 
             stock_antes, stock_despues, valor_total
           ) VALUES (
-            ${item.productId}, ${today}, 'Salida', ${item.quantity}, 
+            ${item.productId}, ${today}, 'Entrada', ${item.quantity}, 
             ${reason}, ${stockAntes}, ${stockDespues}, 
             ${producto[0].precio_venta * item.quantity}
           )
