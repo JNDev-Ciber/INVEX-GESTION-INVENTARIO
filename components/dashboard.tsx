@@ -1616,8 +1616,8 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
                 {movementType === "entrada"
-                  ? "📦 Agregar Stock"
-                  : "🛒 Registrar Venta"}
+                  ? "🛒 Registrar Venta"
+                  : "📦 Agregar Stock"}
                 {connectionStatus === "offline" && (
                   <Badge variant="outline" className="text-orange-600">
                     Offline
@@ -1789,8 +1789,8 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
                   ) : (
                     <>
                       {movementType === "entrada"
-                        ? "📦 Agregar al Stock"
-                        : "🛒 Registrar Venta"}
+                        ? "🛒 Registrar Venta"
+                        : "📦 Agregar Stock"}
                     </>
                   )}
                 </Button>
