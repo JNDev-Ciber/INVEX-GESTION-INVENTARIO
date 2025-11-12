@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ClientesVentasManager } from "../components/clientesVentasManager";
+import type { ClienteVenta } from "../types/inventory";
 import {
   Select,
   SelectContent,
@@ -733,12 +734,36 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
         );
 
       case "facturas-venta":
+        const handleAddClienteFactura = async (
+          nombre: string,
+          cuit: string,
+          telefono: string
+        ): Promise<ClienteVenta | undefined> => {
+          try {
+            const result = await addCliente(nombre, cuit, telefono);
+
+            // Convertir el Record<string, any> a ClienteVenta
+            if (result && typeof result === "object") {
+              return {
+                id: result.id || 0,
+                nombre: result.nombre || nombre,
+                cuit: result.cuit || cuit,
+                telefono: result.telefono || telefono,
+                saldoPendiente: result.saldoPendiente || 0,
+              } as ClienteVenta;
+            }
+            return undefined;
+          } catch (error) {
+            console.error("Error en handleAddClienteFactura:", error);
+            return undefined;
+          }
+        };
         return (
           <FacturaVentaForm
             products={products}
             clientes={clientesVentas}
             onAddVentaFiado={addVentaFiado}
-            addCliente={addCliente}
+            addCliente={handleAddClienteFactura}
             onSaleProduct={async (
               productId: string,
               quantity: number,
