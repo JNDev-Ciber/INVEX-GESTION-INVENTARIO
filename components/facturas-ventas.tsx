@@ -107,6 +107,8 @@ export default function FacturaVentaForm({
   addCliente,
 }: Props) {
   const { toast } = useToast();
+  const [facturaParaMostrar, setFacturaParaMostrar] =
+    useState<FacturaVenta | null>(null);
   const [showClienteDropdown, setShowClienteDropdown] = useState(false);
   const [searchClienteTerm, setSearchClienteTerm] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -491,12 +493,10 @@ export default function FacturaVentaForm({
     }
 
     try {
-      // Buscar cliente por cuit en el array de clientes actual
       let clienteEnBD = clientes.find(
         (c) => c.cuit === facturaActual.cliente.cuit
       );
 
-      // Si no existe, crear y usar el retornado por addCliente
       if (!clienteEnBD) {
         clienteEnBD = await addCliente(
           facturaActual.cliente.nombre,
@@ -513,6 +513,12 @@ export default function FacturaVentaForm({
         }
       }
 
+      // ✅ GUARDAR LA FACTURA ANTES DE PROCESAR
+      const facturaParaGuardar = {
+        ...facturaActual,
+        id: facturaActual.id || Date.now().toString(),
+      };
+
       for (const item of facturaActual.items) {
         await onSaleProduct(
           item.producto.id,
@@ -522,19 +528,16 @@ export default function FacturaVentaForm({
         );
       }
 
-      const factura: FacturaVenta = {
-        ...facturaActual,
-        id: facturaActual.id || Date.now().toString(),
-      };
-
-      setMostrarVistaPrevia(true);
-
       toast({
         title: "Factura de venta procesada",
-        description: `Factura ${factura.numero} registrada y stock actualizado`,
+        description: `Factura ${facturaParaGuardar.numero} registrada y stock actualizado`,
         duration: 3000,
       });
 
+      // ✅ GUARDAR PARA MOSTRAR EN EL MODAL
+      setFacturaParaMostrar(facturaParaGuardar);
+
+      // ✅ AHORA SÍ LIMPIAR EL FORMULARIO
       setFacturaActual({
         id: "",
         numero: generarNumeroFactura(),
@@ -556,7 +559,9 @@ export default function FacturaVentaForm({
       setProductoSeleccionado(null);
       setNuevoItem({ cantidad: "", precioUnitario: "" });
       setMostrarSelectorProducto(false);
-      setMostrarVistaPrevia(false);
+
+      // ✅ MOSTRAR LA VISTA PREVIA AL FINAL
+      setMostrarVistaPrevia(true);
     } catch (error) {
       console.error("Error al procesar la factura:", error);
       toast({
@@ -720,9 +725,6 @@ export default function FacturaVentaForm({
       <div className="mb-8 p-4 bg-blue-50 rounded-lg">
         <h3 className="font-bold text-blue-600 mb-3">DATOS DEL CLIENTE</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div>
-            <strong>CLIENTE CARGADO: </strong>
-          </div>
           <div>
             <p>
               <strong>Nombre:</strong> {factura.cliente.nombre}
@@ -1602,61 +1604,65 @@ export default function FacturaVentaForm({
             <DialogTitle className="flex items-center justify-between">
               <span className="text-blue-600">Factura de Venta Procesada</span>
               <div className="flex gap-2">
-                {/* Botón de descarga PDF */}
-                <PDFDownloadLink
-                  document={
-                    <FacturaVentaPDF
-                      factura={facturaActual}
-                      porcentajeIva={porcentajeIva}
-                    />
-                  }
-                  fileName={`factura-venta-${facturaActual.numero}.pdf`}
-                >
-                  {({ loading }: { loading: boolean }) => (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={loading}
-                      className="flex items-center gap-2"
+                {facturaParaMostrar && (
+                  <>
+                    {/* Botón de descarga PDF */}
+                    <PDFDownloadLink
+                      document={
+                        <FacturaVentaPDF
+                          factura={facturaParaMostrar}
+                          porcentajeIva={porcentajeIva}
+                        />
+                      }
+                      fileName={`factura-venta-${facturaParaMostrar.numero}.pdf`}
                     >
-                      <Download className="h-4 w-4" />
-                      {loading ? "Generando..." : "Descargar PDF"}
-                    </Button>
-                  )}
-                </PDFDownloadLink>
+                      {({ loading }: { loading: boolean }) => (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={loading}
+                          className="flex items-center gap-2"
+                        >
+                          <Download className="h-4 w-4" />
+                          {loading ? "Generando..." : "Descargar PDF"}
+                        </Button>
+                      )}
+                    </PDFDownloadLink>
 
-                {/* Botón de impresión */}
-                <BlobProvider
-                  document={
-                    <FacturaVentaPDF
-                      factura={facturaActual}
-                      porcentajeIva={porcentajeIva}
-                    />
-                  }
-                >
-                  {({
-                    url,
-                    loading,
-                  }: {
-                    url: string | null;
-                    loading: boolean;
-                  }) => (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={loading || !url}
-                      onClick={() => url && window.open(url, "_blank")}
-                      className="flex items-center gap-2"
+                    {/* Botón de impresión */}
+                    <BlobProvider
+                      document={
+                        <FacturaVentaPDF
+                          factura={facturaParaMostrar}
+                          porcentajeIva={porcentajeIva}
+                        />
+                      }
                     >
-                      <Printer className="h-4 w-4" />
-                      {loading ? "Generando..." : "Imprimir"}
-                    </Button>
-                  )}
-                </BlobProvider>
+                      {({
+                        url,
+                        loading,
+                      }: {
+                        url: string | null;
+                        loading: boolean;
+                      }) => (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={loading || !url}
+                          onClick={() => url && window.open(url, "_blank")}
+                          className="flex items-center gap-2"
+                        >
+                          <Printer className="h-4 w-4" />
+                          {loading ? "Generando..." : "Imprimir"}
+                        </Button>
+                      )}
+                    </BlobProvider>
+                  </>
+                )}
               </div>
             </DialogTitle>
           </DialogHeader>
-          <VistaPrevia factura={facturaActual} />
+          {facturaParaMostrar && <VistaPrevia factura={facturaParaMostrar} />}
         </DialogContent>
       </Dialog>
     </div>
