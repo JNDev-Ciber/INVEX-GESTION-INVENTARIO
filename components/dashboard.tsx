@@ -318,7 +318,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
       }
 
       if (quantity <= 0) {
-        setMovementError("La cantidad saldo ser mayor a 0");
+        setMovementError("La cantidad debe ser mayor a 0");
         return;
       }
 
@@ -329,6 +329,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
           quantity,
           finalReason
         );
+
         setShowMovementModal(false);
         setSelectedProductForMovement(null);
         setMovementQuantity("1");
@@ -337,14 +338,17 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
         setUseCustomReason(false);
         setMovementError("");
 
+        // CORRECCIÓN: Invertir la lógica para coincidir con tu perspectiva
         const actionText =
-          movementType === "entrada" ? "agregó stock" : "registró venta";
-        const emoji = movementType === "entrada" ? "📦" : "💰";
+          movementType === "entrada" ? "registró venta" : "agregó stock";
+        const emoji = movementType === "entrada" ? "🛒" : "📦";
 
         toast({
-          title: `${emoji} ${
-            movementType === "entrada" ? "Stock agregado" : "Venta registrada"
-          }`,
+          title:
+            emoji +
+            (movementType === "entrada"
+              ? " Venta registrada"
+              : " Stock agregado"),
           description: `Se ${actionText} de ${quantity} unidades para ${selectedProductForMovement.name}.`,
           duration: 3000,
         });
@@ -354,7 +358,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
         err instanceof Error ? err.message : "Error al procesar el movimiento"
       );
       toast({
-        title: "❌ Error en movimiento",
+        title: "Error en movimiento",
         description:
           err instanceof Error
             ? err.message
@@ -1678,7 +1682,7 @@ export function Dashboard({ onLogout, currentUser }: DashboardProps) {
                     disabled={connectionStatus === "offline"}
                     className="h-10"
                   />
-                  {movementType === "salida" && selectedProductForMovement && (
+                  {movementType === "entrada" && selectedProductForMovement && (
                     <p className="text-xs text-muted-foreground">
                       Máximo disponible: {selectedProductForMovement.quantity}{" "}
                       unidades

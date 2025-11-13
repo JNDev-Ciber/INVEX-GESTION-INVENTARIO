@@ -416,15 +416,15 @@ export function useInventoryNeon() {
       setError(null);
       if (connectionStatus === "offline")
         throw new Error("No hay conexión a la base de datos.");
-  
+
       const result = await sql`
         INSERT INTO clientes_ventas (nombre, cuit, telefono)
         VALUES (${nombre}, ${cuit ? cuit : null}, ${telefono})
         RETURNING id, nombre, cuit, telefono, direccion, email, saldo_pendiente
       `;
-  
+
       await loadAllData();
-  
+
       return result[0];
     } catch (err) {
       const errorMessage =
@@ -433,7 +433,7 @@ export function useInventoryNeon() {
       throw new Error(errorMessage);
     }
   };
-  
+
   const addDeudaDirecta = async (
     clienteId: number,
     monto: number,
@@ -815,10 +815,13 @@ export function useInventoryNeon() {
       }
 
       const stockAntes = producto[0].stock_actual;
-      const stockDespues =
-        type === "entrada" ? stockAntes + quantity : stockAntes - quantity;
 
-      if (type === "salida" && stockDespues < 0) {
+      // ✅ CORREGIDO: entrada (venta) resta stock, salida (compra) suma stock
+      const stockDespues =
+        type === "entrada" ? stockAntes - quantity : stockAntes + quantity;
+
+      // ✅ CORREGIDO: Validar stock insuficiente cuando es ENTRADA (venta)
+      if (type === "entrada" && stockDespues < 0) {
         throw new Error(
           `Stock insuficiente. Disponible: ${stockAntes}, Solicitado: ${quantity}`
         );
