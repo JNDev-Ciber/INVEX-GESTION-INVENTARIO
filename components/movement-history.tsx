@@ -71,7 +71,13 @@ export function MovementHistory({
   const [typeFilter, setTypeFilter] = useState("all");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
-
+  const getArgentinaDateTime = () => {
+    const now = new Date();
+    // Convertir a hora de Argentina (UTC-3)
+    return now.toLocaleString("en-US", {
+      timeZone: "America/Argentina/Buenos_Aires",
+    });
+  };
   const getCurrentMonth = () => {
     const now = new Date();
     return `${now.getFullYear()}-${(now.getMonth() + 1)
@@ -703,19 +709,19 @@ export function MovementHistory({
           <div
             className={`p-4 rounded-lg border transition-colors ${
               isDark
-                ? "bg-green-900/20 border-green-800" 
+                ? "bg-green-900/20 border-green-800"
                 : "bg-green-50 border-green-200"
             }`}
           >
             <div className="flex items-center gap-2 mb-2">
               <ArrowUp
                 className={`h-4 w-4 ${
-                  isDark ? "text-green-400" : "text-green-600" 
+                  isDark ? "text-green-400" : "text-green-600"
                 }`}
               />
               <span
                 className={`text-sm font-medium ${
-                  isDark ? "text-green-300" : "text-green-600" 
+                  isDark ? "text-green-300" : "text-green-600"
                 }`}
               >
                 Entradas
@@ -729,7 +735,9 @@ export function MovementHistory({
               {totalEntradas}
             </p>
             <p
-              className={`text-xs ${isDark ? "text-green-500" : "text-green-700"}`}
+              className={`text-xs ${
+                isDark ? "text-green-500" : "text-green-700"
+              }`}
             >
               ${valorTotalEntradas.toLocaleString("es-ES")}
             </p>
@@ -745,12 +753,12 @@ export function MovementHistory({
             <div className="flex items-center gap-2 mb-2">
               <ArrowDown
                 className={`h-4 w-4 ${
-                  isDark ? "text-red-400" : "text-red-600" 
+                  isDark ? "text-red-400" : "text-red-600"
                 }`}
               />
               <span
                 className={`text-sm font-medium ${
-                  isDark ? "text-red-300" : "text-red-800" 
+                  isDark ? "text-red-300" : "text-red-800"
                 }`}
               >
                 Salidas
@@ -758,15 +766,13 @@ export function MovementHistory({
             </div>
             <p
               className={`text-2xl font-bold ${
-                isDark ? "text-red-400" : "text-red-600" 
+                isDark ? "text-red-400" : "text-red-600"
               }`}
             >
               {totalSalidas}
             </p>
             <p
-              className={`text-xs ${
-                isDark ? "text-red-500" : "text-red-700" 
-              }`}
+              className={`text-xs ${isDark ? "text-red-500" : "text-red-700"}`}
             >
               ${valorTotalSalidas.toLocaleString("es-ES")}
             </p>
@@ -830,12 +836,12 @@ export function MovementHistory({
                     ? "text-green-400"
                     : "text-green-600"
                   : isDark
-                  ? "text-red-400"
+                  ? "text-const getArgentinaDateTime = () => {-400"
                   : "text-red-600"
               }`}
             >
               $
-              {( valorTotalEntradas - valorTotalSalidas ).toLocaleString("es-ES")}{" "}
+              {(valorTotalEntradas - valorTotalSalidas).toLocaleString("es-ES")}{" "}
             </p>
           </div>
         </div>

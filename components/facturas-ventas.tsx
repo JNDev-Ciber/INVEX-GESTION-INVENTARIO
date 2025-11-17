@@ -18,7 +18,7 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover"; // Add this line
+} from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
@@ -26,7 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { PDFDownloadLink, BlobProvider } from "@react-pdf/renderer";
+import { PDFDownloadLink, BlobProvider, pdf } from "@react-pdf/renderer";
 import {
   Receipt,
   Plus,
@@ -208,7 +208,6 @@ export default function FacturaVentaForm({
     observaciones: "",
   });
 
-  const [mostrarVistaPrevia, setMostrarVistaPrevia] = useState(false);
   const [mostrarSelectorProducto, setMostrarSelectorProducto] = useState(false);
 
   // Estados para agregar items
@@ -493,16 +492,23 @@ export default function FacturaVentaForm({
     }
 
     try {
+      // ✅ CORRECCIÓN: Buscar cliente existente por CUIT o por NOMBRE
       let clienteEnBD = clientes.find(
-        (c) => c.cuit === facturaActual.cliente.cuit
+        (c) =>
+          (facturaActual.cliente.cuit &&
+            c.cuit === facturaActual.cliente.cuit) ||
+          (!facturaActual.cliente.cuit &&
+            c.nombre === facturaActual.cliente.nombre)
       );
 
+      // Solo crear cliente nuevo si NO existe en la base de datos
       if (!clienteEnBD) {
         clienteEnBD = await addCliente(
           facturaActual.cliente.nombre,
-          facturaActual.cliente.cuit,
+          facturaActual.cliente.cuit || "", // Si no hay CUIT, enviar string vacío
           facturaActual.cliente.telefono || ""
         );
+
         if (!clienteEnBD || !clienteEnBD.id) {
           toast({
             title: "Error",
@@ -513,12 +519,12 @@ export default function FacturaVentaForm({
         }
       }
 
-      // ✅ GUARDAR LA FACTURA ANTES DE PROCESAR
       const facturaParaGuardar = {
         ...facturaActual,
         id: facturaActual.id || Date.now().toString(),
       };
 
+      // Procesar ventas
       for (const item of facturaActual.items) {
         await onSaleProduct(
           item.producto.id,
@@ -528,16 +534,28 @@ export default function FacturaVentaForm({
         );
       }
 
+      // GENERAR Y DESCARGAR PDF AUTOMÁTICAMENTE
+      const blob = await pdf(
+        <FacturaVentaPDF
+          factura={facturaParaGuardar}
+          porcentajeIva={porcentajeIva}
+        />
+      ).toBlob();
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `factura-venta-${facturaParaGuardar.numero}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+
       toast({
         title: "Factura de venta procesada",
-        description: `Factura ${facturaParaGuardar.numero} registrada y stock actualizado`,
+        description: `Factura ${facturaParaGuardar.numero} registrada y PDF descargado automáticamente`,
         duration: 3000,
       });
 
-      // ✅ GUARDAR PARA MOSTRAR EN EL MODAL
-      setFacturaParaMostrar(facturaParaGuardar);
-
-      // ✅ AHORA SÍ LIMPIAR EL FORMULARIO
+      // Limpiar formulario
       setFacturaActual({
         id: "",
         numero: generarNumeroFactura(),
@@ -555,15 +573,13 @@ export default function FacturaVentaForm({
         total: 0,
         observaciones: "",
       });
+
       setSearchClienteTerm("");
       setProductoSeleccionado(null);
       setNuevoItem({ cantidad: "", precioUnitario: "" });
       setMostrarSelectorProducto(false);
-
-      // ✅ MOSTRAR LA VISTA PREVIA AL FINAL
-      setMostrarVistaPrevia(true);
     } catch (error) {
-      console.error("Error al procesar la factura:", error);
+      console.error("Error al procesar la factura", error);
       toast({
         title: "Error al procesar",
         description:
@@ -578,7 +594,7 @@ export default function FacturaVentaForm({
   const handleDejarAFiado = async () => {
     if (!facturaActual.cliente.nombre.trim()) {
       toast({
-        title: "❌ Error",
+        title: "Error",
         description: "El nombre del cliente es obligatorio",
         variant: "destructive",
       });
@@ -587,7 +603,7 @@ export default function FacturaVentaForm({
 
     if (facturaActual.items.length === 0) {
       toast({
-        title: "❌ Error",
+        title: "Error",
         description: "Agrega al menos un producto",
         variant: "destructive",
       });
@@ -597,19 +613,25 @@ export default function FacturaVentaForm({
     try {
       setIsLoading(true);
 
+      // ✅ CORRECCIÓN: Buscar por CUIT o NOMBRE
       let clienteEnBD = clientes.find(
-        (c) => c.cuit === facturaActual.cliente.cuit
+        (c) =>
+          (facturaActual.cliente.cuit &&
+            c.cuit === facturaActual.cliente.cuit) ||
+          (!facturaActual.cliente.cuit &&
+            c.nombre === facturaActual.cliente.nombre)
       );
 
       if (!clienteEnBD) {
         clienteEnBD = await addCliente(
           facturaActual.cliente.nombre,
-          facturaActual.cliente.cuit,
+          facturaActual.cliente.cuit || "",
           facturaActual.cliente.telefono || ""
         );
+
         if (!clienteEnBD || !clienteEnBD.id) {
           toast({
-            title: "❌ Error",
+            title: "Error",
             description: "No se pudo guardar el cliente",
             variant: "destructive",
           });
@@ -625,7 +647,7 @@ export default function FacturaVentaForm({
 
       if (!onAddVentaFiado) {
         toast({
-          title: "❌ Error",
+          title: "Error",
           description: "Función de venta no disponible",
           variant: "destructive",
         });
@@ -636,7 +658,7 @@ export default function FacturaVentaForm({
       const resultado = await onAddVentaFiado(clienteEnBD.id, productosVenta);
 
       toast({
-        title: "✅ Venta a cuenta corriente registrada",
+        title: "Venta a cuenta corriente registrada",
         description: `$${facturaActual.total.toLocaleString()} dejada a cuenta para ${
           clienteEnBD.nombre
         }`,
@@ -660,15 +682,15 @@ export default function FacturaVentaForm({
         total: 0,
         observaciones: "",
       });
+
       setSearchClienteTerm("");
       setProductoSeleccionado(null);
       setNuevoItem({ cantidad: "", precioUnitario: "" });
       setMostrarSelectorProducto(false);
-      setMostrarVistaPrevia(false);
     } catch (error) {
-      console.error("❌ Error en venta fiado:", error);
+      console.error("Error en venta fiado:", error);
       toast({
-        title: "❌ Error al procesar",
+        title: "Error al procesar",
         description:
           error instanceof Error
             ? error.message
@@ -1594,75 +1616,6 @@ export default function FacturaVentaForm({
               </div>
             )}
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal de vista previa */}
-      <Dialog open={mostrarVistaPrevia} onOpenChange={setMostrarVistaPrevia}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <span className="text-blue-600">Factura de Venta Procesada</span>
-              <div className="flex gap-2">
-                {facturaParaMostrar && (
-                  <>
-                    {/* Botón de descarga PDF */}
-                    <PDFDownloadLink
-                      document={
-                        <FacturaVentaPDF
-                          factura={facturaParaMostrar}
-                          porcentajeIva={porcentajeIva}
-                        />
-                      }
-                      fileName={`factura-venta-${facturaParaMostrar.numero}.pdf`}
-                    >
-                      {({ loading }: { loading: boolean }) => (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={loading}
-                          className="flex items-center gap-2"
-                        >
-                          <Download className="h-4 w-4" />
-                          {loading ? "Generando..." : "Descargar PDF"}
-                        </Button>
-                      )}
-                    </PDFDownloadLink>
-
-                    {/* Botón de impresión */}
-                    <BlobProvider
-                      document={
-                        <FacturaVentaPDF
-                          factura={facturaParaMostrar}
-                          porcentajeIva={porcentajeIva}
-                        />
-                      }
-                    >
-                      {({
-                        url,
-                        loading,
-                      }: {
-                        url: string | null;
-                        loading: boolean;
-                      }) => (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={loading || !url}
-                          onClick={() => url && window.open(url, "_blank")}
-                          className="flex items-center gap-2"
-                        >
-                          <Printer className="h-4 w-4" />
-                          {loading ? "Generando..." : "Imprimir"}
-                        </Button>
-                      )}
-                    </BlobProvider>
-                  </>
-                )}
-              </div>
-            </DialogTitle>
-          </DialogHeader>
-          {facturaParaMostrar && <VistaPrevia factura={facturaParaMostrar} />}
         </DialogContent>
       </Dialog>
     </div>

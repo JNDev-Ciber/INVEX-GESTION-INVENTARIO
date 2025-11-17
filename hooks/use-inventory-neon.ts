@@ -494,7 +494,7 @@ export function useInventoryNeon() {
           stock_antes, stock_despues, valor_total
         ) VALUES (
           NULL, 
-          ${today}, 
+          ${new Date().toISOString()},, 
           'Salida', 
           0, 
           ${`DEUDA MANUAL - ${clienteNombre}: ${concepto || "Sin concepto"}`},
@@ -697,7 +697,7 @@ export function useInventoryNeon() {
           valor_total
         ) VALUES (
           NULL,
-          ${today},
+          ${new Date().toISOString()},
           'Entrada',
           0,
           ${`PAGO DE ${clienteNombre} - $${monto.toLocaleString()}`},
@@ -836,7 +836,7 @@ export function useInventoryNeon() {
           producto_id, fecha, tipo, cantidad, motivo, 
           stock_antes, stock_despues, valor_total
         ) VALUES (
-          ${productId}, ${new Date().toISOString().split("T")[0]}, 
+          ${productId}, ${new Date().toISOString()},
           ${type === "entrada" ? "Entrada" : "Salida"}, ${quantity}, 
           ${reason.trim()}, ${stockAntes}, ${stockDespues}, 
           ${valorTotal}
@@ -985,7 +985,7 @@ export function useInventoryNeon() {
             producto_id, fecha, tipo, cantidad, motivo, 
             stock_antes, stock_despues, valor_total
           ) VALUES (
-            ${item.productId}, ${today}, 'Entrada', ${item.quantity}, 
+            ${item.productId}, ${new Date().toISOString()}, 'Entrada', ${item.quantity}, 
             ${reason}, ${stockAntes}, ${stockDespues}, 
             ${producto[0].precio_venta * item.quantity}
           )
@@ -1099,7 +1099,7 @@ export function useInventoryNeon() {
             stock_antes, stock_despues, valor_total
           ) VALUES (
             ${item.productoId}, 
-            ${today}, 
+            ${new Date().toISOString()}, 
             'Salida', 
             ${item.cantidad}, 
             ${`FIADO A ${clienteNombre}`},
