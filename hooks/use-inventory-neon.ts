@@ -494,7 +494,7 @@ export function useInventoryNeon() {
           stock_antes, stock_despues, valor_total
         ) VALUES (
           NULL, 
-          ${new Date().toISOString()},, 
+          ${new Date().toISOString()},
           'Salida', 
           0, 
           ${`DEUDA MANUAL - ${clienteNombre}: ${concepto || "Sin concepto"}`},

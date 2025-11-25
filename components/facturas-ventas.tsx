@@ -114,6 +114,7 @@ export default function FacturaVentaForm({
   const [barcodeInput, setBarcodeInput] = useState("");
   const barcodeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastBarcodeTimeRef = useRef<number>(0);
+  const [isFacturaLoading, setIsFacturaLoading] = useState(false);
 
   const filteredClientes = useMemo(() => {
     if (!searchClienteTerm) return clientes;
@@ -473,26 +474,30 @@ export default function FacturaVentaForm({
   };
 
   const procesarFacturaVenta = async () => {
-    if (!facturaActual.cliente.nombre.trim()) {
-      toast({
-        title: "Error",
-        description: "El nombre del cliente es obligatorio",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (facturaActual.items.length === 0) {
-      toast({
-        title: "Error",
-        description: "Agrega al menos un producto a la factura",
-        variant: "destructive",
-      });
-      return;
-    }
+    setIsFacturaLoading(true);
 
     try {
-      // ✅ CORRECCIÓN: Buscar cliente existente por CUIT o por NOMBRE
+      // Validar cliente
+      if (!facturaActual.cliente.nombre.trim()) {
+        toast({
+          title: "Error",
+          description: "El nombre del cliente es obligatorio",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Validar items
+      if (facturaActual.items.length === 0) {
+        toast({
+          title: "Error",
+          description: "Agrega al menos un producto a la factura",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Buscar cliente existente por CUIT o NOMBRE
       let clienteEnBD = clientes.find(
         (c) =>
           (facturaActual.cliente.cuit &&
@@ -501,11 +506,11 @@ export default function FacturaVentaForm({
             c.nombre === facturaActual.cliente.nombre)
       );
 
-      // Solo crear cliente nuevo si NO existe en la base de datos
+      // Crear cliente nuevo si no existe
       if (!clienteEnBD) {
         clienteEnBD = await addCliente(
           facturaActual.cliente.nombre,
-          facturaActual.cliente.cuit || "", // Si no hay CUIT, enviar string vacío
+          facturaActual.cliente.cuit || "",
           facturaActual.cliente.telefono || ""
         );
 
@@ -534,7 +539,7 @@ export default function FacturaVentaForm({
         );
       }
 
-      // GENERAR Y DESCARGAR PDF AUTOMÁTICAMENTE
+      // Generar y descargar PDF automáticamente
       const blob = await pdf(
         <FacturaVentaPDF
           factura={facturaParaGuardar}
@@ -588,6 +593,8 @@ export default function FacturaVentaForm({
             : "No se pudo procesar la venta",
         variant: "destructive",
       });
+    } finally {
+      setIsFacturaLoading(false);
     }
   };
 
@@ -1478,7 +1485,8 @@ export default function FacturaVentaForm({
           onClick={procesarFacturaVenta}
           disabled={
             facturaActual.items.length === 0 ||
-            !facturaActual.cliente.nombre.trim()
+            !facturaActual.cliente.nombre.trim() ||
+            isFacturaLoading
           }
           className="bg-blue-600 hover:bg-blue-700 px-8 py-3"
           size="lg"
@@ -1492,7 +1500,8 @@ export default function FacturaVentaForm({
           disabled={
             facturaActual.items.length === 0 ||
             !facturaActual.cliente.nombre.trim() ||
-            isLoading
+            isLoading ||
+            isFacturaLoading
           }
           className="bg-amber-600 hover:bg-amber-700 px-8 py-3"
           size="lg"
